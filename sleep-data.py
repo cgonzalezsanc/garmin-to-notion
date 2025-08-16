@@ -74,7 +74,7 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
         "REM Sleep": {"rich_text": [{"text": {"content": format_duration(daily_sleep.get('remSleepSeconds', 0))}}]},
         "Awake Time": {"rich_text": [{"text": {"content": format_duration(daily_sleep.get('awakeSleepSeconds', 0))}}]},
         "Resting HR": {"number": sleep_data.get('restingHeartRate', 0)},
-        "Score": {"number": sleep_data.get('sleepScores', {}).get('overall', {}).get('value', None)}
+        "Score": {"number": daily_sleep.get('sleepScores', {}).get('overall', {}).get('value', None)}
     }
     
     client.pages.create(parent={"database_id": database_id}, properties=properties, icon={"emoji": "😴"})
