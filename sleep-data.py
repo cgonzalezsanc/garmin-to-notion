@@ -96,7 +96,8 @@ def main():
     data = get_sleep_data(garmin)
     if data:
         sleep_date = data.get('dailySleepDTO', {}).get('calendarDate')
-        if sleep_date and not sleep_data_exists(client, database_id, sleep_date):
+        # if sleep_date and not sleep_data_exists(client, database_id, sleep_date):
+        if sleep_date:
             create_sleep_data(client, database_id, data, skip_zero_sleep=True)
 
 if __name__ == '__main__':
