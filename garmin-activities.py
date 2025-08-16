@@ -6,7 +6,7 @@ import pytz
 import os
 
 # Your local time zone, replace with the appropriate one if needed
-local_tz = pytz.timezone('America/Toronto')
+local_tz = pytz.timezone('Europe/Madrid')
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
@@ -30,7 +30,7 @@ ACTIVITY_ICONS = {
     # Add more mappings as needed
 }
 
-def get_all_activities(garmin, limit=1000):
+def get_all_activities(garmin, limit=10):
     return garmin.get_activities(0, limit)
 
 def format_activity_type(activity_type, activity_name=""):
