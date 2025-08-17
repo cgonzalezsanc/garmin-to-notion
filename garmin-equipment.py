@@ -10,7 +10,7 @@ def main():
     notion_token = os.getenv("NOTION_TOKEN")
     database_id = os.getenv("NOTION_EQ_DB_ID")
 
-    # Iniciar sesión en Garmin
+   # Iniciar sesión en Garmin
     garmin = Garmin(garmin_email, garmin_password)
     garmin.login()
 
@@ -38,7 +38,7 @@ def main():
         # Completo la información del gear
         gear_stats = garmin.get_gear_stats(gear.get('uuid'))
         gear_activities = gear_stats.get('totalActivities', 0)
-        gear_distance = round(gear_stats.get('totalDistance', 0))
+        gear_distance = round(gear_stats.get('totalDistance', 0)/1000)
 
         # Filtros para buscar entrada existente
         query_filter = {
