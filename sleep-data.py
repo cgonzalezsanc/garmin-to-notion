@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from garminconnect import Garmin
 from notion_client import Client
 from dotenv import load_dotenv, dotenv_values
@@ -76,9 +76,26 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
         "Resting HR": {"number": sleep_data.get('restingHeartRate', 0)},
         "Score": {"number": daily_sleep.get('sleepScores', {}).get('overall', {}).get('value', None)}
     }
+
+    query_filter = {"property": "Long Date", "date": {"equals": sleep_date}}
+
+
+    response = client.databases.query(
+        database_id=database_id,
+        filter=query_filter
+    )
     
-    client.pages.create(parent={"database_id": database_id}, properties=properties, icon={"emoji": "😴"})
-    print(f"Created sleep entry for: {sleep_date}")
+    if response["results"]:
+        # Ya existe, actualiza
+        page_id = response["results"][0]["id"]
+        client.pages.update(page_id=page_id, properties=properties, icon={"emoji": "😴"})
+        print(f"Not updated sleep entry for: {sleep_date}")
+    else:
+        # No existe, crea nuevo
+        client.pages.create(parent={"database_id": database_id}, properties=properties, icon={"emoji": "😴"})
+        print(f"Created sleep entry for: {sleep_date}")
+    #client.pages.create(parent={"database_id": database_id}, properties=properties, icon={"emoji": "😴"})
+
 
 def main():
     load_dotenv()
@@ -94,12 +111,21 @@ def main():
     garmin.login()
     client = Client(auth=notion_token)
 
-    data = get_sleep_data(garmin)
-    if data:
-        sleep_date = data.get('dailySleepDTO', {}).get('calendarDate')
-        # if sleep_date and not sleep_data_exists(client, database_id, sleep_date):
-        if sleep_date:
-            create_sleep_data(client, database_id, data, skip_zero_sleep=True)
+    """
+    Get last x days of daily step count data from Garmin Connect.
+    """
+    startdate = date.today() - timedelta(days=3)
+    enddate = date.today()
+    daterange = [startdate + timedelta(days=x) for x in range((enddate - startdate).days + 1)]
+
+    daily_sleep = []
+    for d in daterange:
+        daily_sleep = garmin.get_sleep_data(d.isoformat())
+        if daily_sleep:
+            sleep_date = daily_sleep.get('dailySleepDTO', {}).get('calendarDate')
+            # if sleep_date and not sleep_data_exists(client, database_id, sleep_date):
+            if sleep_date:
+                create_sleep_data(client, database_id, daily_sleep, skip_zero_sleep=True)
 
 if __name__ == '__main__':
     main()
