@@ -12,6 +12,7 @@ This project connects your Garmin activities and personal records to your Notion
   📱  Compatible with all Garmin activities and devices  
   🔧  Easy setup with clear instructions and minimal coding required  
 
+test
 ## Prerequisites :hammer_and_wrench:  
 - A Notion account with API access.
 - A Garmin Connect account to pull activity data.
@@ -38,6 +39,7 @@ For more advanced users, follow these steps to set up the integration:
   * NOTION_PR_DB_ID
   * NOTION_STEPS_DB_ID (optional)
   * NOTION_SLEEP_DB_ID (optional)
+  * NOTION_EQ_DB_ID (optional)
 ### 5. Run Scripts (if not using automatic workflow)
 * Run [garmin-activities.py](https://github.com/chloevoyer/garmin-to-notion/blob/main/garmin-activities.py) to sync your Garmin activities to Notion.  
 `python garmin-activities.py`
