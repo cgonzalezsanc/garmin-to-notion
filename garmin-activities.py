@@ -30,7 +30,7 @@ ACTIVITY_ICONS = {
     # Add more mappings as needed
 }
 
-def get_all_activities(garmin, limit=10):
+def get_all_activities(garmin, limit=5):
     return garmin.get_activities(0, limit)
 
 def format_activity_type(activity_type, activity_name=""):
@@ -125,8 +125,7 @@ def activity_exists(client, database_id, activity_date, activity_type, activity_
         filter={
             "and": [
                 {"property": "Date", "date": {"equals": activity_date.split('T')[0]}},
-                {"property": "Activity Type", "select": {"equals": lookup_type}},
-                {"property": "Activity Name", "title": {"equals": activity_name}}
+                {"property": "Activity Type", "select": {"equals": lookup_type}}
             ]
         }
     )
@@ -169,7 +168,7 @@ def activity_needs_update(existing_activity, new_activity):
         (not has_subactivity)  # If the property doesn't exist, we need an update
     )
 
-def create_activity(client, database_id, activity):
+def create_activity(client, database_id, activity, train_type):
 
     # Create a new activity in the Notion database
     activity_date = activity.get('startTimeGMT')
@@ -186,11 +185,13 @@ def create_activity(client, database_id, activity):
         "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
+        "Train Type": {"select": {"name": train_type}},
         "Activity Name": {"title": [{"text": {"content": activity_name}}]},
         "Distance (km)": {"number": round(activity.get('distance', 0) / 1000, 2)},
         "Duration (min)": {"number": round(activity.get('duration', 0) / 60, 2)},
         "Calories": {"number": round(activity.get('calories', 0))},
         "Avg Pace": {"rich_text": [{"text": {"content": format_pace(activity.get('averageSpeed', 0))}}]},
+        "Avg HR": {"number": round(new_activity.get('averageHR', 0))},
         "Avg Power": {"number": round(activity.get('avgPower', 0), 1)},
         "Max Power": {"number": round(activity.get('maxPower', 0), 1)},
         "Training Effect": {"select": {"name": format_training_effect(activity.get('trainingEffectLabel', 'Unknown'))}},
@@ -212,7 +213,7 @@ def create_activity(client, database_id, activity):
     
     client.pages.create(**page)
     
-def update_activity(client, existing_activity, new_activity):
+def update_activity(client, existing_activity, new_activity, train_type):
 
     # Update an existing activity in the Notion database with new data
     activity_name = new_activity.get('activityName', 'Unnamed Activity')
@@ -227,9 +228,12 @@ def update_activity(client, existing_activity, new_activity):
     properties = {
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
+        "Train Type": {"select": {"name": train_type}},
+        "Activity Name": {"title": [{"text": {"content": activity_name}}]},
         "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1000, 2)},
         "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
         "Calories": {"number": round(new_activity.get('calories', 0))},
+        "Avg HR": {"number": round(new_activity.get('averageHR', 0))},
         "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
         "Avg Power": {"number": round(new_activity.get('avgPower', 0), 1)},
         "Max Power": {"number": round(new_activity.get('maxPower', 0), 1)},
@@ -251,6 +255,26 @@ def update_activity(client, existing_activity, new_activity):
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
         
     client.pages.update(**update)
+
+def get_training_type(activity_type, activity_name):
+    if activity_type == "Running":
+        if activity_name.startswith("R -"):
+            train_type = "Rodaje"
+        elif activity_name.startswith("T - "):
+            train_type = "Tempo"
+        elif activity_name.startswith("S - "):
+            train_type = "Series"
+        elif activity_name.startswith("TL -"):
+            train_type = "Tirada larga"
+        elif activity_name.startswith("C -"):
+            train_type = "Competición"
+        elif activity_name.startswith("Fartlek"):
+            train_type = "Fartlek"
+        else:
+            train_type = "PTE"
+    else:
+        train_type = activity_type
+    return train_type
 
 def main():
     load_dotenv()
@@ -277,17 +301,19 @@ def main():
             activity.get('activityType', {}).get('typeKey', 'Unknown'),
             activity_name
         )
+
+        train_type = get_training_type(activity_type, activity_name)
         
         # Check if activity already exists in Notion
         existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
         
         if existing_activity:
-            if activity_needs_update(existing_activity, activity):
-                update_activity(client, existing_activity, activity)
-                # print(f"Updated: {activity_type} - {activity_name}")
+            #if activity_needs_update(existing_activity, activity):
+            update_activity(client, existing_activity, activity, train_type)
+            print(f"Updated: {activity_type} - {activity_name}")
         else:
-            create_activity(client, database_id, activity)
-            # print(f"Created: {activity_type} - {activity_name}")
+            create_activity(client, database_id, activity, train_type)
+            print(f"Created: {activity_type} - {activity_name}")
 
 if __name__ == '__main__':
     main()

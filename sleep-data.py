@@ -77,8 +77,8 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
         "Score": {"number": daily_sleep.get('sleepScores', {}).get('overall', {}).get('value', None)}
     }
 
+    # Filtro para comprobar si ya existe la entrada
     query_filter = {"property": "Long Date", "date": {"equals": sleep_date}}
-
 
     response = client.databases.query(
         database_id=database_id,
