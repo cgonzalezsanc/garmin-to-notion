@@ -2,6 +2,7 @@ from datetime import date
 from garminconnect import Garmin
 from notion_client import Client
 import os
+import sys
 
     # Añado las imágenes para cada uno
 GEAR_IMAGES = {
@@ -26,38 +27,67 @@ def get_gears(garmin):
     # Obtener el equipamiento
     return garmin.get_gear(user_profile_number)
 
-def fill_properties(gear, garmin, today, custom_make_model, gear_id):
+def assign_gear_to_activities(client, gear_activities, gear_name):
+    act_database_id = os.getenv("NOTION_DB_ID")
+    # itero sobre cada actividad de al base de datos de actividades
+    for gear_activity in gear_activities:
+        gear_activity_id = gear_activity.get('activityId', 0)
+        # pongo un filtro para buscar en la tabla de actividades por el id de la actividad
+        query_filter = {"property": "Activity Id", "number": {"equals": gear_activity_id}}
+        filter_response = client.databases.query(
+            database_id=act_database_id,
+            filter=query_filter
+        )
+        # si se encuentra la actividad, ver si ya tiene definido el campo gear
+        #print(f"Filter response results {filter_response["results"]}")
+        if filter_response["results"]:
+            # si no lo tiene, añado el gear y sigo con la siguiente iteración del bucle
+            #print(f"Nombre de la zapa: {filter_response["results"][0]["properties"]["Shoes"]['select']}")
+            if not filter_response["results"][0]["properties"]["Shoes"]['select']:
+                properties = {"Shoes": {"select": {"name": gear_name}}}
+                page_id = filter_response["results"][0]["id"]
+                client.pages.update(
+                    page_id=page_id,
+                    properties=properties
+                )
+                print(f"Añadido {gear_name} a la actividad {filter_response["results"][0]["properties"]["Activity Name"]["title"][0]["plain_text"]}")
+            # si lo tiene, termino el bucle y me salgo
+    return
+
+def fill_properties(client, gear, garmin, today, gear_name, gear_id):
     gear_status = gear.get('gearStatusName', '')
     gear_type = gear.get('displayName')
+    gear_uuid = gear.get('uuid')
 
-    # Completo la información del gear
-    gear_stats = garmin.get_gear_stats(gear.get('uuid'))
-    gear_activities = gear_stats.get('totalActivities', 0)
+    # Completo la información del gear con las actividades y distancia
+    gear_stats = garmin.get_gear_stats(gear_uuid)
+    gear_nmb_activities = gear_stats.get('totalActivities', 0)
     gear_distance = round(gear_stats.get('totalDistance', 0)/1000)
+
+    # Completo más la información de las actividades
+    if gear_status == 'active':
+        gear_activities = garmin.get_gear_ativities(gear_uuid, limit=3)
+        assign_gear_to_activities(client, gear_activities, gear_name)
 
     # Formato para Notion API (ajusta a tu estructura de propiedades si cambia)
     properties = {
-        "Nombre":      {"title": [{"text": {"content": str(custom_make_model)}}]},
+        "Nombre":      {"title": [{"text": {"content": str(gear_name)}}]},
         "Id":          {"number": gear_id},
         "Estado":      {"select": {"name": str(gear_status)}},
         "Tipo":        {"select": {"name": str(gear_type)}},
         "Fecha":       {"date": {"start": today}},
-        "Actividades": {"number": gear_activities},
+        "Actividades": {"number": gear_nmb_activities},
         "Km":          {"number": gear_distance}
     }
 
     return properties
 
 # Comprobación de si el equipamiento ya existe en la tabla de Notion
-def check_gear_exists(gear_id, today, client, database_id):
-    # Filtros para buscar entrada existente
-    query_filter = {
-        "and": [
-            {"property": "Id", "number": {"equals": gear_id}},
-            {"property": "Fecha", "date": {"equals": today}}
-        ]
-    }
+def check_if_gear_exists(gear_id, client, database_id):
+    # Filtro para comprobar si ya existe la entrada
+    query_filter = {"property": "Id", "number": {"equals": gear_id}}
 
+    # Petición para filtrar la base de datos
     filter_response = client.databases.query(
         database_id=database_id,
         filter=query_filter
@@ -87,16 +117,15 @@ def main():
 
     # Recorremos cada equipo y guardamos la información en Notion
     for gear in gears:
-        custom_make_model = gear.get('customMakeModel', 'Sin nombre')
+        gear_name = gear.get('customMakeModel', 'Sin nombre')
         gear_id = gear.get('gearPk', '')
-        properties = fill_properties(gear, garmin, today, custom_make_model, gear_id)
+        properties = fill_properties(client, gear, garmin, today, gear_name, gear_id)
 
         # comprobamos si existe
-        filter_response = check_gear_exists(gear_id, today, client, database_id)
+        filter_response = check_if_gear_exists(gear_id, client, database_id)
 
         # Saco la URL de la imagen correspondiente
-        img_url = GEAR_IMAGES.get(custom_make_model, "https://i.ibb.co/ynf136zm/16-best-long-distance-running-shoes-15275091-main.webp")
-        print("Imagen " + img_url)
+        img_url = GEAR_IMAGES.get(gear_name, "https://i.ibb.co/ynf136zm/16-best-long-distance-running-shoes-15275091-main.webp")
 
         if filter_response["results"]:
             # Ya existe, actualiza
@@ -106,7 +135,7 @@ def main():
                 properties=properties,
                 cover={"type": "external", "external": {"url": img_url}}
             )
-            print(f"Actualizado: {custom_make_model}")
+            print(f"Actualizado: {gear_name}")
         else:
             # No existe, crea nuevo
             client.pages.create(
@@ -114,7 +143,7 @@ def main():
                 properties=properties,
                 cover={"type": "external", "external": {"url": img_url}}
             )
-            print(f"Creado: {custom_make_model}")
+            print(f"Creado: {gear_name}")
 
 if __name__ == "__main__":
     main()
