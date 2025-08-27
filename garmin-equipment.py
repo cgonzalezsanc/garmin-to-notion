@@ -59,7 +59,7 @@ def assign_gear_to_activities(client, gear_activities, gear_name):
                     page_id=page_id,
                     properties=properties
                 )
-                print(f"Añadido {gear_name} a la actividad {filter_response["results"][0]["properties"]["Activity Name"]["title"][0]["plain_text"]}")
+                #print(f"Añadido {gear_name} a la actividad {filter_response["results"][0]["properties"]["Activity Name"]["title"][0]["plain_text"]}")
             # si lo tiene, termino el bucle y me salgo
     return
 
