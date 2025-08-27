@@ -19,6 +19,15 @@ GEAR_IMAGES = {
     # Add more mappings as needed
 }
 
+GEAR_ICONS = {
+    "asics": "https://i.ibb.co/PZXnJZds/asics.webp",
+    "adidas": "https://i.ibb.co/6RS08KtL/adidas-logo-adidas-icon-transparent-free-png.webp",
+    "hoka": "https://i.ibb.co/MDDTwrMN/Hoka-Update-2.png",
+    "nike": "https://i.ibb.co/fVpDW7Rw/nike.jpg",
+    "saucony": "https://i.ibb.co/rXpXDfX/saucony.webp",
+    # Add more mappings as needed
+}
+
 def get_gears(garmin):
     # Recuperar el perfil de usuario y su id
     user_profile = garmin.get_user_profile()
@@ -95,6 +104,16 @@ def check_if_gear_exists(gear_id, client, database_id):
 
     return filter_response
 
+def get_gear_icon_url(gear_name):
+    # Convertimos gear_name a minúsculas robustas con casefold
+    gear_name_cf = gear_name.casefold()
+
+    for brand, url in GEAR_ICONS.items():
+        # Comprobamos si el nombre de la marca aparece en gear_name (ambos en minúsculas con casefold)
+        if brand.casefold() in gear_name_cf:
+            return url
+    return "https://img.icons8.com/?size=100&id=XAUYGhUZyfQG&format=png&color=000000"  # Si no se encuentra ninguna marca
+
 def main():
     # Autenticación y configuración
     garmin_email = os.getenv("GARMIN_EMAIL")
@@ -124,8 +143,11 @@ def main():
         # comprobamos si existe
         filter_response = check_if_gear_exists(gear_id, client, database_id)
 
-        # Saco la URL de la imagen correspondiente
+        # Saco la URL de la imagen e icono correspondiente
         img_url = GEAR_IMAGES.get(gear_name, "https://i.ibb.co/ynf136zm/16-best-long-distance-running-shoes-15275091-main.webp")
+
+        # Saco la URL del icono
+        icon_url = get_gear_icon_url(gear_name)
 
         if filter_response["results"]:
             # Ya existe, actualiza
@@ -133,7 +155,8 @@ def main():
             client.pages.update(
                 page_id=page_id,
                 properties=properties,
-                cover={"type": "external", "external": {"url": img_url}}
+                cover={"type": "external", "external": {"url": img_url}},
+                icon={"type": "external", "external": {"url": icon_url}}
             )
             print(f"Actualizado: {gear_name}")
         else:
@@ -141,7 +164,8 @@ def main():
             client.pages.create(
                 parent={"database_id": database_id},
                 properties=properties,
-                cover={"type": "external", "external": {"url": img_url}}
+                cover={"type": "external", "external": {"url": img_url}},
+                icon={"type": "external", "external": {"url": icon_url}}
             )
             print(f"Creado: {gear_name}")
 
