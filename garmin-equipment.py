@@ -75,7 +75,7 @@ def fill_properties(client, gear, garmin, today, gear_name, gear_id):
 
     # Completo más la información de las actividades
     if gear_status == 'active':
-        gear_activities = garmin.get_gear_ativities(gear_uuid, limit=3)
+        gear_activities = garmin.get_gear_activities(gear_uuid, limit=3)
         assign_gear_to_activities(client, gear_activities, gear_name)
 
     # Formato para Notion API (ajusta a tu estructura de propiedades si cambia)
