@@ -16,6 +16,7 @@ GEAR_IMAGES = {
     "Saucony Endorphin Pro 4": "https://i.ibb.co/Pv1mw8Cs/Endorphin-Pro-4.jpg",
     "Asics Superblast 2": "https://i.ibb.co/F49NZJct/ASICS-Superblast-2.webp",
     "Adidas Adizero EVO SL": "https://i.ibb.co/C50J0CWp/Zapatilla-Adizero-EVO-SL-Plateado-JR3419-01-00-standard.jpg",
+    "Nike Vomero Plus": "https://static.nike.com/a/images/t_web_pdp_535_v2/f_auto/4746e60f-d845-4f02-a5cf-f06ab8db9312/NIKE+VOMERO+PLUS.png",
     # Add more mappings as needed
 }
 
