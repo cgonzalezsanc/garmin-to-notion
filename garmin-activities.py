@@ -30,6 +30,78 @@ ACTIVITY_ICONS = {
     # Add more mappings as needed
 }
 
+# Renombrado de EXERCISE_ICONS a MUSCLE_ICON
+MUSCLE_ICON = {
+    "Pecho": "https://img.icons8.com/?size=100&id=9799&format=png&color=000000",
+    "Hombro": "https://img.icons8.com/?size=100&id=69242&format=png&color=000000",
+    "Triceps": "https://img.icons8.com/?size=100&id=25784&format=png&color=000000",
+    "Espalda": "https://img.icons8.com/?size=100&id=xgnHWDvKTYao&format=png&color=000000",
+    "Biceps": "https://img.icons8.com/?size=100&id=25785&format=png&color=000000",
+    "Cuadriceps": "https://img.icons8.com/?size=100&id=25786&format=png&color=000000",
+    "Isquiotibiales": "https://img.icons8.com/?size=100&id=69250&format=png&color=000000",
+    "Gemelos": "https://img.icons8.com/?size=100&id=2uHAd0xU0fWA&format=png&color=000000",
+    "Abdominales": "https://img.icons8.com/?size=100&id=5389&format=png&color=000000"
+}
+
+EXERCISE_NAME_MAP = {
+    "STANDING_EZ_BAR_BICEPS_CURL": "Curl de bíceps con barra Z",
+    "FACE_PULL": "Jalón al pecho en máquina",
+    "INDOOR_ROW": "Remo en máquina",
+    "BENT_OVER_LATERAL_RAISE": "Elevaciones laterales de hombro",
+    "DUMBBELL_HAMMER_CURL": "Curl martillo con mancuernas",
+    "STANDING_CABLE_PULLOVER": "Face pull con polea",
+    "BARBELL_DEADLIFT": "Peso muerto con barra",
+    "WEIGHTED_CRUNCH": "Crunches de abdominales",
+    "INCLINE_BARBELL_BENCH_PRESS": "Press inclinado con barra",
+    "CABLE_OVERHEAD_TRICEPS_EXTENSION": "Extensión de tríceps por encima de la cabeza",
+    "BARBELL_BENCH_PRESS": "Press banca",
+    "MILITARY_PRESS": "Press militar",
+    "CHEST_FLY": "Aperturas de pecho",
+    "EZ_BAR_OVERHEAD_TRICEPS_EXTENSION": "Press francés",
+    "TRICEPS_EXTENSION": "Extensión de tríceps",
+    "ROMANIAN_DEADLIFT": "Peso muerto rumano",
+    "KNEELING_AB_WHEEL": "Rueda de abdominales",
+    "WARM_UP": "Calentamiento",
+    "CHIN_UP": "Dominadas",
+    "HAMSTRING_CURL": "Curl de isquiotibiales",
+    "CARDIO": "Calentamiento",
+    "CURL": "Curl de bíceps",
+    "UNKNOWN": "Desconocido"
+    # aquí puedes ir añadiendo más mappings según vayan saliendo
+}
+
+# Mapeo de ejercicios a grupos musculares (multi-select)
+EXERCISE_MUSCLE_MAP = {
+    "STANDING_EZ_BAR_BICEPS_CURL": ["Biceps"],
+    "FACE_PULL": ["Hombro", "Espalda"],
+    "INDOOR_ROW": ["Espalda", "Biceps"],
+    "BENT_OVER_LATERAL_RAISE": ["Hombro"],
+    "DUMBBELL_HAMMER_CURL": ["Biceps"],
+    "STANDING_CABLE_PULLOVER": ["Espalda"],
+    "BARBELL_DEADLIFT": ["Espalda", "Isquiotibiales", "Cuadriceps", "Gemelos"],
+    "WEIGHTED_CRUNCH": ["Abdominales"],
+    "INCLINE_BARBELL_BENCH_PRESS": ["Pecho", "Triceps", "Hombro"],
+    "CABLE_OVERHEAD_TRICEPS_EXTENSION": ["Triceps"],
+    "BARBELL_BENCH_PRESS": ["Pecho", "Triceps", "Hombro"],
+    "MILITARY_PRESS": ["Hombro", "Triceps"],
+    "CHEST_FLY": ["Pecho"],
+    "EZ_BAR_OVERHEAD_TRICEPS_EXTENSION": ["Triceps"],
+    "TRICEPS_EXTENSION": ["Triceps"],
+    "ROMANIAN_DEADLIFT": ["Isquiotibiales", "Espalda", "Gemelos"],
+    "KNEELING_AB_WHEEL": ["Abdominales"],
+    "WARM_UP": [],
+    "CHIN_UP": ["Espalda", "Biceps"],
+    "HAMSTRING_CURL": ["Isquiotibiales"],
+    "CARDIO": [],
+    "CURL": ["Biceps"],
+    "UNKNOWN": []
+}
+
+
+def get_muscle_groups(subcategoria):
+    """Obtiene los grupos musculares para un ejercicio"""
+    return EXERCISE_MUSCLE_MAP.get(subcategoria.upper(), [])
+
 def get_all_activities(garmin, limit=10):
     return garmin.get_activities(0, limit)
 
@@ -73,7 +145,7 @@ def format_activity_type(activity_type, activity_name=""):
         return "Strength", "Barre"
     if activity_name and "stretch" in activity_name.lower():
         return "Stretching", "Stretching"
-    
+
     return activity_type, activity_subtype
 
 def format_entertainment(activity_name):
@@ -106,7 +178,7 @@ def format_pace(average_speed):
         return f"{minutes}:{seconds:02d} min/km"
     else:
         return ""
-    
+
 def activity_exists(client, database_id, activity_date, activity_type, activity_name):
 
     # Check if an activity already exists in the Notion database and return it if found.
@@ -116,10 +188,10 @@ def activity_exists(client, database_id, activity_date, activity_type, activity_
         main_type, _ = activity_type
     else:
         main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
-    
+
     # Determine the correct activity type for the lookup
     lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
-    
+
     query = client.databases.query(
         database_id=database_id,
         filter={
@@ -132,23 +204,22 @@ def activity_exists(client, database_id, activity_date, activity_type, activity_
     results = query['results']
     return results[0] if results else None
 
-
 def activity_needs_update(existing_activity, new_activity):
     existing_props = existing_activity['properties']
-    
+
     activity_name = new_activity.get('activityName', '').lower()
     activity_type, activity_subtype = format_activity_type(
         new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
     )
-    
+
     # Check if 'Subactivity Type' property exists
     has_subactivity = (
-        'Subactivity Type' in existing_props and 
+        'Subactivity Type' in existing_props and
         existing_props['Subactivity Type'] is not None and
         existing_props['Subactivity Type'].get('select') is not None
     )
-    
+
     return (
         existing_props['Distance (km)']['number'] != round(new_activity.get('distance', 0) / 1000, 2) or
         existing_props['Duration (min)']['number'] != round(new_activity.get('duration', 0) / 60, 2) or
@@ -177,10 +248,10 @@ def create_activity(client, database_id, activity, train_type):
         activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
     )
-    
+
     # Get icon for the activity type
     icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
-    
+
     properties = {
         "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
@@ -203,29 +274,28 @@ def create_activity(client, database_id, activity, train_type):
         "PR": {"checkbox": activity.get('pr', False)},
         "Fav": {"checkbox": activity.get('favorite', False)}
     }
-    
+
     page = {
         "parent": {"database_id": database_id},
         "properties": properties,
     }
-    
+
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
-    
-    client.pages.create(**page)
-    
-def update_activity(client, existing_activity, new_activity, train_type):
 
+    client.pages.create(**page)
+
+def update_activity(client, existing_activity, new_activity, train_type):
     # Update an existing activity in the Notion database with new data
     activity_name = new_activity.get('activityName', 'Unnamed Activity')
     activity_type, activity_subtype = format_activity_type(
         new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
     )
-    
+
     # Get icon for the activity type
     icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
-    
+
     properties = {
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
@@ -247,15 +317,15 @@ def update_activity(client, existing_activity, new_activity, train_type):
         "PR": {"checkbox": new_activity.get('pr', False)},
         "Fav": {"checkbox": new_activity.get('favorite', False)}
     }
-    
+
     update = {
         "page_id": existing_activity['id'],
         "properties": properties,
     }
-    
+
     if icon_url:
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
-        
+
     client.pages.update(**update)
 
 def get_training_type(activity_type, activity_name):
@@ -278,6 +348,125 @@ def get_training_type(activity_type, activity_name):
         train_type = activity_type
     return train_type
 
+def exercise_exists(client, database_exercises_id, activity_date, subcategoria):
+    query = client.databases.query(
+        database_id=database_exercises_id,
+        filter={
+            "and": [
+                {"property": "Fecha", "date": {"equals": activity_date.split("T")[0]}},
+                {"property": "Subcategoria", "select": {"equals": subcategoria}},
+            ]
+        }
+    )
+    results = query.get("results", [])
+    return results[0] if results else None
+
+def create_exercise_entry(client, database_exercises_id, activity, exercise):
+    activity_date = activity.get("startTimeGMT")
+
+    subcategoria = exercise.get("subCategory") or exercise.get("category") or "Unknown"
+    categoria = exercise.get("category", "Unknown")
+    repeticiones = exercise.get("reps", 0)
+    series = exercise.get("sets", 0)
+    volumen_raw = exercise.get("volume", 0)
+    peso_max_raw = exercise.get("maxWeight", 0)
+
+    volumen = volumen_raw / 1000 if volumen_raw is not None else 0
+    peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
+    avg_rep = (repeticiones / series) if series not in (0, None) else 0
+    avg_rep = round(avg_rep, 2)
+
+    nombre_ejercicio = EXERCISE_NAME_MAP.get(subcategoria, subcategoria)
+
+    # Obtener grupos musculares
+    muscle_groups = get_muscle_groups(subcategoria)
+    muscle_properties = [{"name": muscle} for muscle in muscle_groups]
+
+    properties = {
+        "Fecha": {"date": {"start": activity_date}},
+        "Nombre": {"title": [{"text": {"content": nombre_ejercicio}}]},
+        "Subcategoria": {"select": {"name": subcategoria}},
+        "Categoria": {"select": {"name": categoria}},
+        "Tot Rep": {"number": repeticiones},
+        "Series": {"number": series},
+        "Avg Rep": {"number": avg_rep},
+        "Volumen": {"number": volumen},
+        "Peso máximo": {"number": peso_maximo},
+        "Grupo muscular": {"multi_select": muscle_properties},
+    }
+
+    client.pages.create(
+        parent={"database_id": database_exercises_id},
+        properties=properties,
+    )
+    print(f"Created exercise: {nombre_ejercicio}")
+
+def update_exercise_entry(client, existing_page, activity, exercise):
+    activity_date = activity.get("startTimeGMT")
+
+    subcategoria = exercise.get("subCategory") or exercise.get("category") or "Unknown"
+    categoria = exercise.get("category", "Unknown")
+    repeticiones = exercise.get("reps", 0)
+    series = exercise.get("sets", 0)
+    volumen_raw = exercise.get("volume", 0)
+    peso_max_raw = exercise.get("maxWeight", 0)
+
+    volumen = volumen_raw / 1000 if volumen_raw is not None else 0
+    peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
+    avg_rep = (repeticiones / series) if series not in (0, None) else 0
+    avg_rep = round(avg_rep, 2)
+
+    nombre_ejercicio = EXERCISE_NAME_MAP.get(subcategoria, subcategoria)
+
+    # Obtener grupos musculares
+    muscle_groups = get_muscle_groups(subcategoria)
+    muscle_properties = [{"name": muscle} for muscle in muscle_groups]
+
+    properties = {
+        "Fecha": {"date": {"start": activity_date}},
+        "Nombre": {"title": [{"text": {"content": nombre_ejercicio}}]},
+        "Subcategoria": {"select": {"name": subcategoria}},
+        "Categoria": {"select": {"name": categoria}},
+        "Tot Rep": {"number": repeticiones},
+        "Series": {"number": series},
+        "Avg Rep": {"number": avg_rep},
+        "Volumen": {"number": volumen},
+        "Peso máximo": {"number": peso_maximo},
+        "Grupo muscular": {"multi_select": muscle_properties},
+    }
+
+    client.pages.update(
+        page_id=existing_page["id"],
+        properties=properties,
+    )
+    print(f"Updated exercise: {nombre_ejercicio}")
+
+def get_activity_detail(client, activity, activity_type):
+    if activity_type != "Strength":
+        return
+
+    database_exercises_id = os.getenv("NOTION_EX_DB_ID")
+    if not database_exercises_id:
+        return
+
+    activity_date = activity.get("startTimeGMT")
+    summarized_sets = activity.get("summarizedExerciseSets", []) or []
+
+    for s in summarized_sets:
+        subcategoria = s.get("subCategory") or s.get("category") or "Unknown"
+
+        existing = exercise_exists(
+            client,
+            database_exercises_id,
+            activity_date,
+            subcategoria,
+        )
+
+        if existing:
+            update_exercise_entry(client, existing, activity, s)
+        else:
+            create_exercise_entry(client, database_exercises_id, activity, s)
+
 def main():
     load_dotenv()
 
@@ -286,12 +475,13 @@ def main():
     garmin_password = os.getenv("GARMIN_PASSWORD")
     notion_token = os.getenv("NOTION_TOKEN")
     database_id = os.getenv("NOTION_DB_ID")
+    database_exercises_id = os.getenv("NOTION_EX_DB_ID")
 
     # Initialize Garmin client and login
     garmin = Garmin(garmin_email, garmin_password)
     garmin.login()
     client = Client(auth=notion_token)
-    
+
     # Get all activities
     activities = get_all_activities(garmin)
 
@@ -303,6 +493,9 @@ def main():
             activity.get('activityType', {}).get('typeKey', 'Unknown'),
             activity_name
         )
+
+        # Detalle de ejercicios de fuerza
+        get_activity_detail(client, activity, activity_type)
 
         train_type = get_training_type(activity_type, activity_name)
         
