@@ -465,6 +465,7 @@ def get_activity_detail(client, activity, activity_type):
 
         if existing:
             #update_exercise_entry(client, existing, activity, s)
+            print(f"Ejercicio ya encontrado y no actualizado")
         else:
             create_exercise_entry(client, database_exercises_id, activity, s)
 
