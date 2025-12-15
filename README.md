@@ -40,6 +40,7 @@ For more advanced users, follow these steps to set up the integration:
   * NOTION_STEPS_DB_ID (optional)
   * NOTION_SLEEP_DB_ID (optional)
   * NOTION_EQ_DB_ID (optional)
+  * NOTION_EX_DB_ID (optional)
 ### 5. Run Scripts (if not using automatic workflow)
 * Run [garmin-activities.py](https://github.com/chloevoyer/garmin-to-notion/blob/main/garmin-activities.py) to sync your Garmin activities to Notion.  
 `python garmin-activities.py`
