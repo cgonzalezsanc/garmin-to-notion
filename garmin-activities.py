@@ -447,6 +447,7 @@ def get_activity_detail(client, activity, activity_type):
 
     database_exercises_id = os.getenv("NOTION_EX_DB_ID")
     if not database_exercises_id:
+        print(f"Base de datos de ejercicios no encontrada")
         return
 
     activity_date = activity.get("startTimeGMT")
@@ -463,7 +464,7 @@ def get_activity_detail(client, activity, activity_type):
         )
 
         if existing:
-            update_exercise_entry(client, existing, activity, s)
+            #update_exercise_entry(client, existing, activity, s)
         else:
             create_exercise_entry(client, database_exercises_id, activity, s)
 
