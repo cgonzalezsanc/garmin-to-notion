@@ -477,7 +477,6 @@ def main():
     notion_token = os.getenv("NOTION_TOKEN")
     database_id = os.getenv("NOTION_DB_ID")
     database_exercises_id = os.getenv("NOTION_EX_DB_ID")
-    print(database_exercises_id)
 
     # Initialize Garmin client and login
     garmin = Garmin(garmin_email, garmin_password)
