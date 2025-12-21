@@ -441,11 +441,10 @@ def update_exercise_entry(client, existing_page, activity, exercise):
     )
     print(f"Updated exercise: {nombre_ejercicio}")
 
-def get_activity_detail(client, activity, activity_type):
+def get_activity_detail(client, activity, activity_type, database_exercises_id):
     if activity_type != "Strength":
         return
 
-    database_exercises_id = os.getenv("NOTION_EX_DB_ID")
     if not database_exercises_id:
         print(f"Base de datos de ejercicios no encontrada")
         return
@@ -497,7 +496,7 @@ def main():
         )
 
         # Detalle de ejercicios de fuerza
-        get_activity_detail(client, activity, activity_type)
+        get_activity_detail(client, activity, activity_type, database_exercises_id)
 
         train_type = get_training_type(activity_type, activity_name)
         
