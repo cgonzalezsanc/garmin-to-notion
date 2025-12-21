@@ -102,7 +102,7 @@ def get_muscle_groups(subcategoria):
     """Obtiene los grupos musculares para un ejercicio"""
     return EXERCISE_MUSCLE_MAP.get(subcategoria.upper(), [])
 
-def get_all_activities(garmin, limit=10):
+def get_all_activities(garmin, limit=20):
     return garmin.get_activities(0, limit)
 
 def format_activity_type(activity_type, activity_name=""):
