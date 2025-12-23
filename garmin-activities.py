@@ -7,6 +7,8 @@ import os
 
 # Your local time zone, replace with the appropriate one if needed
 local_tz = pytz.timezone('Europe/Madrid')
+# Límite de actividades
+act_limit = 20;
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
@@ -66,6 +68,15 @@ EXERCISE_NAME_MAP = {
     "HAMSTRING_CURL": "Curl de isquiotibiales",
     "CARDIO": "Calentamiento",
     "CURL": "Curl de bíceps",
+    "LEG_PRESS": "Prensa de piernas",
+    "BARBELL_SIFF_SQUAT": "Sentadilla con barra",
+    "SINGLE_LEG_STANDING_DUMBBELL_CALF_RAISE": "Elevación de gemelos",
+    "WEIGHTED_LEG_CURL": "Curl de pierna lastrado",
+    "LEG_LEVERS": "Elevaciones de piernas",
+    "BENT_OVER_ROW_WITH_BARBELL": "Remo inclinado con barra",
+    "WEIGHTED_SEATED_CALF_RAISE": "Estiramiento de gemelos en máquina de prensa",
+    "WEIGHTED_HIP_RAISE": "Hip thrust",
+    "LEG_RAISE": "Elevaciones de piernas",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -94,6 +105,15 @@ EXERCISE_MUSCLE_MAP = {
     "HAMSTRING_CURL": ["Isquiotibiales"],
     "CARDIO": [],
     "CURL": ["Biceps"],
+    "LEG_PRESS": ["Cuádriceps", "Glúteos"],
+    "BARBELL_SIFF_SQUAT": ["Cuádriceps", "Glúteos"],
+    "SINGLE_LEG_STANDING_DUMBBELL_CALF_RAISE": ["Gemelos"],
+    "WEIGHTED_LEG_CURL": ["Cuádriceps"],
+    "LEG_LEVERS": ["Abdominales"],
+    "BENT_OVER_ROW_WITH_BARBELL": ["Espalda"],
+    "WEIGHTED_SEATED_CALF_RAISE": ["Gemelos"],
+    "WEIGHTED_HIP_RAISE": ["Glúteos"],
+    "LEG_RAISE": ["Abdominales"],
     "UNKNOWN": []
 }
 
@@ -102,7 +122,7 @@ def get_muscle_groups(subcategoria):
     """Obtiene los grupos musculares para un ejercicio"""
     return EXERCISE_MUSCLE_MAP.get(subcategoria.upper(), [])
 
-def get_all_activities(garmin, limit=5):
+def get_all_activities(garmin, limit=act_limit):
     return garmin.get_activities(0, limit)
 
 def format_activity_type(activity_type, activity_name=""):
@@ -464,7 +484,6 @@ def get_activity_detail(client, activity, activity_type, database_exercises_id):
 
         if existing:
             update_exercise_entry(client, existing, activity, s)
-            print(f"Ejercicio ya encontrado y no actualizado")
         else:
             create_exercise_entry(client, database_exercises_id, activity, s)
 
