@@ -8,7 +8,7 @@ import os
 # Your local time zone, replace with the appropriate one if needed
 local_tz = pytz.timezone('Europe/Madrid')
 # Límite de actividades
-act_limit = 20;
+act_limit = 10
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
@@ -39,7 +39,7 @@ MUSCLE_ICON = {
     "Triceps": "https://img.icons8.com/?size=100&id=25784&format=png&color=000000",
     "Espalda": "https://img.icons8.com/?size=100&id=xgnHWDvKTYao&format=png&color=000000",
     "Biceps": "https://img.icons8.com/?size=100&id=25785&format=png&color=000000",
-    "Cuadriceps": "https://img.icons8.com/?size=100&id=25786&format=png&color=000000",
+    "Cuádriceps": "https://img.icons8.com/?size=100&id=25786&format=png&color=000000",
     "Isquiotibiales": "https://img.icons8.com/?size=100&id=69250&format=png&color=000000",
     "Gemelos": "https://img.icons8.com/?size=100&id=2uHAd0xU0fWA&format=png&color=000000",
     "Abdominales": "https://img.icons8.com/?size=100&id=5389&format=png&color=000000"
@@ -77,6 +77,8 @@ EXERCISE_NAME_MAP = {
     "WEIGHTED_SEATED_CALF_RAISE": "Estiramiento de gemelos en máquina de prensa",
     "WEIGHTED_HIP_RAISE": "Hip thrust",
     "LEG_RAISE": "Elevaciones de piernas",
+    "PULL_UP": "Dominadas",
+    "INCLINE_SMITH_MACHINE_BENCH_PRESS": "Press inclinado con mancuernas",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -114,6 +116,8 @@ EXERCISE_MUSCLE_MAP = {
     "WEIGHTED_SEATED_CALF_RAISE": ["Gemelos"],
     "WEIGHTED_HIP_RAISE": ["Glúteos"],
     "LEG_RAISE": ["Abdominales"],
+    "PULL_UP": ["Espalda"],
+    "INCLINE_SMITH_MACHINE_BENCH_PRESS": ["Pecho", "Triceps", "Hombro"],
     "UNKNOWN": []
 }
 
@@ -415,10 +419,19 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
         "Grupo muscular": {"multi_select": muscle_properties},
     }
 
-    client.pages.create(
-        parent={"database_id": database_exercises_id},
-        properties=properties,
-    )
+    page = {
+        "parent": {"database_id": database_exercises_id},
+        "properties": properties,
+    }
+
+    # Icono del primer músculo
+    if muscle_groups:
+        primary_muscle = muscle_groups[0]
+        icon_url = MUSCLE_ICON.get(primary_muscle)
+        if icon_url:
+            page["icon"] = {"type": "external", "external": {"url": icon_url}}
+
+    client.pages.create(**page)
     print(f"Created exercise: {nombre_ejercicio}")
 
 def update_exercise_entry(client, existing_page, activity, exercise):
@@ -455,10 +468,19 @@ def update_exercise_entry(client, existing_page, activity, exercise):
         "Grupo muscular": {"multi_select": muscle_properties},
     }
 
-    client.pages.update(
-        page_id=existing_page["id"],
-        properties=properties,
-    )
+    update = {
+        "page_id": existing_page["id"],
+        "properties": properties,
+    }
+
+    # Icono del primer músculo
+    if muscle_groups:
+        primary_muscle = muscle_groups[0]
+        icon_url = MUSCLE_ICON.get(primary_muscle)
+        if icon_url:
+            update["icon"] = {"type": "external", "external": {"url": icon_url}}
+
+    client.pages.update(**update)
     print(f"Updated exercise: {nombre_ejercicio}")
 
 def get_activity_detail(client, activity, activity_type, database_exercises_id):

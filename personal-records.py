@@ -19,6 +19,13 @@ def get_icon_for_record(activity_name):
         "Most Steps in a Week": "🚶",
         "Most Steps in a Month": "📅",
         "Longest Goal Streak": "✔️",
+        "Press banca con barra": "🦍",
+        "Sentadilla": "🏋️",
+        "Peso muerto con barra": "🦵",
+        "Remo con barra": "🐋",
+        "Press militar": "🐢",
+        "Curl bíceps": "💪",
+        "Curl martillo": "🦾",
         "Other": "🏅"
     }
     return icon_map.get(activity_name, "🏅")  # Default to "Other" icon if not found
@@ -37,7 +44,14 @@ def get_cover_for_record(activity_name):
         "Most Steps in a Day": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800",
         "Most Steps in a Week": "https://images.unsplash.com/photo-1602174865963-9159ed37e8f1?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800",
         "Most Steps in a Month": "https://images.unsplash.com/photo-1580058572462-98e2c0e0e2f0?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800",
-        "Longest Goal Streak": "https://images.unsplash.com/photo-1477332552946-cfb384aeaf1c?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800"
+        "Longest Goal Streak": "https://images.unsplash.com/photo-1477332552946-cfb384aeaf1c?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800",
+        "Press banca con barra": "https://i.ibb.co/fd5gLCMQ/press-banca.jpg",
+        "Sentadilla": "https://i.ibb.co/2YtCrmDt/sentadilla.jpg",
+        "Peso muerto con barra": "https://i.ibb.co/4wcT0sTc/peso-muerto.jpg",
+        "Remo con barra": "https://i.ibb.co/vx7fH61v/remo-inclinado.jpg",
+        "Press militar": "https://i.ibb.co/mVJCNz3h/press-militar.jpg",
+        "Curl bíceps": "https://i.ibb.co/d0RjMdqT/curl-biceps.jpg",
+        "Curl martillo": "https://i.ibb.co/dJ6BRXSb/curl-martillo.jpg",
     }
     return cover_map.get(activity_name, "https://images.unsplash.com/photo-1471506480208-91b3a4cc78be?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=4800") 
 
@@ -163,6 +177,18 @@ def format_garmin_value(value, activity_type, typeId):
         pace = ""
         return formatted_value, pace
 
+    if typeId == 28:  # Press banca
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
+    if typeId == 31:  # Peso muerto
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
     # Default case
     if int(value // 60) < 60:  # If total time is less than an hour
         minutes = int(value // 60)
@@ -192,7 +218,9 @@ def replace_activity_name_by_typeId(typeId):
         12: "Most Steps in a Day",
         13: "Most Steps in a Week",
         14: "Most Steps in a Month",
-        15: "Longest Goal Streak"
+        15: "Longest Goal Streak",
+        28: "Press banca con barra",
+        31: "Peso muerto con barra"
     }
     return typeId_name_map.get(typeId, "Unnamed Activity")
 
