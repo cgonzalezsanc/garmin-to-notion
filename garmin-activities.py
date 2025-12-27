@@ -8,7 +8,7 @@ import os
 # Your local time zone, replace with the appropriate one if needed
 local_tz = pytz.timezone('Europe/Madrid')
 # Límite de actividades
-act_limit = 10
+act_limit = 5
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
@@ -42,7 +42,8 @@ MUSCLE_ICON = {
     "Cuádriceps": "https://img.icons8.com/?size=100&id=25786&format=png&color=000000",
     "Isquiotibiales": "https://img.icons8.com/?size=100&id=69250&format=png&color=000000",
     "Gemelos": "https://img.icons8.com/?size=100&id=2uHAd0xU0fWA&format=png&color=000000",
-    "Abdominales": "https://img.icons8.com/?size=100&id=5389&format=png&color=000000"
+    "Abdominales": "https://img.icons8.com/?size=100&id=5389&format=png&color=000000",
+    "Glúteos": "https://img.icons8.com/?size=100&id=ReBXWBo7bj-u&format=png&color=000000"
 }
 
 EXERCISE_NAME_MAP = {
@@ -79,6 +80,7 @@ EXERCISE_NAME_MAP = {
     "LEG_RAISE": "Elevaciones de piernas",
     "PULL_UP": "Dominadas",
     "INCLINE_SMITH_MACHINE_BENCH_PRESS": "Press inclinado con mancuernas",
+    "FRONT_FOOT_ELEVATED_DUMBBELL_SPLIT_SQUAT": "Sentadilla búlgara con mancuernas",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -118,6 +120,7 @@ EXERCISE_MUSCLE_MAP = {
     "LEG_RAISE": ["Abdominales"],
     "PULL_UP": ["Espalda"],
     "INCLINE_SMITH_MACHINE_BENCH_PRESS": ["Pecho", "Triceps", "Hombro"],
+    "FRONT_FOOT_ELEVATED_DUMBBELL_SPLIT_SQUAT": ["Cuádriceps", "Glúteos"],
     "UNKNOWN": []
 }
 
