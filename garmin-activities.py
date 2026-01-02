@@ -81,6 +81,9 @@ EXERCISE_NAME_MAP = {
     "PULL_UP": "Dominadas",
     "INCLINE_SMITH_MACHINE_BENCH_PRESS": "Press inclinado con mancuernas",
     "FRONT_FOOT_ELEVATED_DUMBBELL_SPLIT_SQUAT": "Sentadilla búlgara con mancuernas",
+    "BARBELL_ROW": "Remo inclinado con barra",
+    "BARBELL_BICEPS_CURL": "Curl de bíceps",
+    "OVERHEAD_BARBELL_PRESS": "Press militar",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -88,7 +91,7 @@ EXERCISE_NAME_MAP = {
 # Mapeo de ejercicios a grupos musculares (multi-select)
 EXERCISE_MUSCLE_MAP = {
     "STANDING_EZ_BAR_BICEPS_CURL": ["Biceps"],
-    "FACE_PULL": ["Hombro", "Espalda"],
+    "FACE_PULL": ["Espalda", "Hombro"],
     "INDOOR_ROW": ["Espalda", "Biceps"],
     "BENT_OVER_LATERAL_RAISE": ["Hombro"],
     "DUMBBELL_HAMMER_CURL": ["Biceps"],
@@ -121,6 +124,9 @@ EXERCISE_MUSCLE_MAP = {
     "PULL_UP": ["Espalda"],
     "INCLINE_SMITH_MACHINE_BENCH_PRESS": ["Pecho", "Triceps", "Hombro"],
     "FRONT_FOOT_ELEVATED_DUMBBELL_SPLIT_SQUAT": ["Cuádriceps", "Glúteos"],
+    "BARBELL_ROW": ["Espalda"],
+    "BARBELL_BICEPS_CURL": ["Biceps"],
+    "OVERHEAD_BARBELL_PRESS": ["Hombro", "Triceps"],
     "UNKNOWN": []
 }
 
