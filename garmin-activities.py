@@ -84,6 +84,7 @@ EXERCISE_NAME_MAP = {
     "BARBELL_ROW": "Remo inclinado con barra",
     "BARBELL_BICEPS_CURL": "Curl de bíceps",
     "OVERHEAD_BARBELL_PRESS": "Press militar",
+    "BARBELL_BACK_SQUAT": "Sentadilla con barra",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -127,6 +128,7 @@ EXERCISE_MUSCLE_MAP = {
     "BARBELL_ROW": ["Espalda"],
     "BARBELL_BICEPS_CURL": ["Biceps"],
     "OVERHEAD_BARBELL_PRESS": ["Hombro", "Triceps"],
+    "BARBELL_BACK_SQUAT": ["Cuádriceps", "Glúteos"],
     "UNKNOWN": []
 }
 
