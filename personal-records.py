@@ -66,6 +66,9 @@ def format_activity_name(activity_name):
     return activity_name
 
 def format_garmin_value(value, activity_type, typeId):
+    print("tipo " + str(typeId))
+    print("valor " + str(value))
+    print("actividad " + str(activity_type))
     if typeId  == 1:  # 1K
         total_seconds = round(value)  # Round to the nearest second
         minutes = total_seconds // 60
@@ -183,7 +186,37 @@ def format_garmin_value(value, activity_type, typeId):
         pace = ""
         return formatted_value, pace
 
+    if typeId == 29:  # Press militar
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
+    if typeId == 30:  # Sentadilla
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
     if typeId == 31:  # Peso muerto
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
+    if typeId == 32:  # Remo con barra
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
+    if typeId == 45:  # Curl de bíceps
+        value_kg = round(value)/1000
+        formatted_value = f"{value_kg} kg"
+        pace = ""
+        return formatted_value, pace
+
+    if typeId == 49:  # Curl martillo
         value_kg = round(value)/1000
         formatted_value = f"{value_kg} kg"
         pace = ""
@@ -220,7 +253,12 @@ def replace_activity_name_by_typeId(typeId):
         14: "Most Steps in a Month",
         15: "Longest Goal Streak",
         28: "Press banca con barra",
-        31: "Peso muerto con barra"
+        29: "Press militar",
+        30: "Sentadilla",
+        31: "Peso muerto con barra",
+        32: "Remo con barra",
+        45: "Curl bíceps",
+        49: "Curl martillo",
     }
     return typeId_name_map.get(typeId, "Unnamed Activity")
 
