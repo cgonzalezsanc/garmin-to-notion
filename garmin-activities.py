@@ -8,7 +8,7 @@ import os
 # Your local time zone, replace with the appropriate one if needed
 local_tz = pytz.timezone('Europe/Madrid')
 # Límite de actividades
-act_limit = 50
+act_limit = 5
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
