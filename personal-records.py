@@ -262,9 +262,17 @@ def replace_activity_name_by_typeId(typeId):
     }
     return typeId_name_map.get(typeId, "Unnamed Activity")
 
+def get_data_source_id(client, database_id):
+    db = client.databases.retrieve(database_id=database_id)
+    data_sources = db.get("data_sources", [])
+    if not data_sources:
+        raise RuntimeError(f"No data_sources found for database {database_id}")
+    return data_sources[0]["id"]
+
 def get_existing_record(client, database_id, activity_name):
-    query = client.databases.query(
-        database_id=database_id,
+    data_source_id = get_data_source_id(client, database_id)
+    query = client.data_sources.query(
+        data_source_id=data_source_id,
         filter={
             "and": [
                 {"property": "Record", "title": {"equals": activity_name}},
@@ -275,8 +283,9 @@ def get_existing_record(client, database_id, activity_name):
     return query['results'][0] if query['results'] else None
 
 def get_record_by_date_and_name(client, database_id, activity_date, activity_name):
-    query = client.databases.query(
-        database_id=database_id,
+    data_source_id = get_data_source_id(client, database_id)
+    query = client.data_sources.query(
+        data_source_id=data_source_id,
         filter={
             "and": [
                 {"property": "Record", "title": {"equals": activity_name}},

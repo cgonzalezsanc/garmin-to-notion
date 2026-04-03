@@ -8,7 +8,7 @@ def get_all_daily_steps(garmin):
     """
     Get last x days of daily step count data from Garmin Connect.
     """
-    startdate = date.today() - timedelta(days=3)
+    startdate = date.today() - timedelta(days=15)
     enddate = date.today() - timedelta(days=1)
     
     daterange = [startdate + timedelta(days=x) for x in range((enddate - startdate).days + 1)]  # incluye ayer
@@ -17,11 +17,20 @@ def get_all_daily_steps(garmin):
         daily_steps += garmin.get_daily_steps(d.isoformat(), d.isoformat())
     return daily_steps
 
+def get_data_source_id(client, database_id):
+    db = client.databases.retrieve(database_id=database_id)
+    data_sources = db.get("data_sources", [])
+    if not data_sources:
+        raise RuntimeError(f"No data_sources found for database {database_id}")
+    return data_sources[0]["id"]
+
 def daily_steps_exist(client, database_id, activity_date):
     """
     Check if daily step count already exists in the Notion database.
     """
-    query = client.databases.query(
+    data_source_id = get_data_source_id(client, database_id)
+    query = client.data_sources.query(
+        data_source_id=data_source_id,
         database_id=database_id,
         filter={
             "and": [

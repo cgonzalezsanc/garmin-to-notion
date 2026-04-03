@@ -44,8 +44,11 @@ def assign_gear_to_activities(client, gear_activities, gear_name):
         gear_activity_id = gear_activity.get('activityId', 0)
         # pongo un filtro para buscar en la tabla de actividades por el id de la actividad
         query_filter = {"property": "Activity Id", "number": {"equals": gear_activity_id}}
-        filter_response = client.databases.query(
-            database_id=act_database_id,
+
+        data_source_id = get_data_source_id(client, act_database_id)
+
+        filter_response = client.data_sources.query(
+            data_source_id=data_source_id,
             filter=query_filter
         )
         # si se encuentra la actividad, ver si ya tiene definido el campo gear
@@ -92,14 +95,23 @@ def fill_properties(client, gear, garmin, today, gear_name, gear_id):
 
     return properties
 
+def get_data_source_id(client, database_id):
+    db = client.databases.retrieve(database_id=database_id)
+    data_sources = db.get("data_sources", [])
+    if not data_sources:
+        raise RuntimeError(f"No data_sources found for database {database_id}")
+    return data_sources[0]["id"]
+
 # Comprobación de si el equipamiento ya existe en la tabla de Notion
 def check_if_gear_exists(gear_id, client, database_id):
     # Filtro para comprobar si ya existe la entrada
     query_filter = {"property": "Id", "number": {"equals": gear_id}}
 
+    data_source_id = get_data_source_id(client, database_id)
+
     # Petición para filtrar la base de datos
-    filter_response = client.databases.query(
-        database_id=database_id,
+    filter_response = client.data_sources.query(
+        data_source_id=data_source_id,
         filter=query_filter
     )
 

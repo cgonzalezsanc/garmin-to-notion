@@ -8,7 +8,7 @@ import os
 # Your local time zone, replace with the appropriate one if needed
 local_tz = pytz.timezone('Europe/Madrid')
 # Límite de actividades
-act_limit = 5
+act_limit = 10
 
 ACTIVITY_ICONS = {
     "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
@@ -218,28 +218,31 @@ def format_pace(average_speed):
     else:
         return ""
 
+def get_data_source_id(client, database_id):
+    db = client.databases.retrieve(database_id=database_id)
+    data_sources = db.get("data_sources", [])
+    if not data_sources:
+        raise RuntimeError(f"No data_sources found for database {database_id}")
+    return data_sources[0]["id"]
+
 def activity_exists(client, database_id, activity_date, activity_type, activity_name):
-    """
-    Check if an activity already exists in the Notion database and return it if found.
-    """
-    # Extraer solo la fecha
     dt = datetime.strptime(activity_date, "%Y-%m-%d %H:%M:%S")
     date_only = dt.date().isoformat()
 
-    # Handle the activity_type which is now a tuple
     if isinstance(activity_type, tuple):
         main_type, _ = activity_type
     else:
         main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
 
-    # Determine the correct activity type for the lookup
     lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
 
-    query = client.databases.query(
-        database_id=database_id,
+    data_source_id = get_data_source_id(client, database_id)
+
+    query = client.data_sources.query(
+        data_source_id=data_source_id,
         filter={
             "and": [
-                {"property": "Date", "date": {"equals": date_only}},  # Solo YYYY-MM-DD
+                {"property": "Date", "date": {"equals": date_only}},
                 {"property": "Activity Type", "select": {"equals": lookup_type}}
             ]
         }
@@ -395,8 +398,10 @@ def exercise_exists(client, database_exercises_id, activity_date, subcategoria):
     dt = datetime.strptime(activity_date, "%Y-%m-%d %H:%M:%S")
     date_only = dt.date().isoformat()
 
-    query = client.databases.query(
-        database_id=database_exercises_id,
+    data_source_id = get_data_source_id(client, database_exercises_id)
+
+    query = client.data_sources.query(
+        data_source_id=data_source_id,
         filter={
             "and": [
                 {"property": "Fecha", "date": {"equals": date_only}},

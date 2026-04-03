@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, UTC
 from garminconnect import Garmin
 from notion_client import Client
 from dotenv import load_dotenv, dotenv_values
@@ -22,7 +22,7 @@ def format_duration(seconds):
 
 def format_time(timestamp):
     return (
-        datetime.utcfromtimestamp(timestamp / 1000).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        datetime.fromtimestamp(timestamp / 1000).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         if timestamp else None
     )
 
@@ -42,6 +42,13 @@ def sleep_data_exists(client, database_id, sleep_date):
     )
     results = query.get('results', [])
     return results[0] if results else None  # Ensure it returns None instead of causing IndexError
+
+def get_data_source_id(client, database_id):
+    db = client.databases.retrieve(database_id=database_id)
+    data_sources = db.get("data_sources", [])
+    if not data_sources:
+        raise RuntimeError(f"No data_sources found for database {database_id}")
+    return data_sources[0]["id"]
 
 def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
     daily_sleep = sleep_data.get('dailySleepDTO', {})
@@ -80,8 +87,9 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
     # Filtro para comprobar si ya existe la entrada
     query_filter = {"property": "Long Date", "date": {"equals": sleep_date}}
 
-    response = client.databases.query(
-        database_id=database_id,
+    data_source_id = get_data_source_id(client, database_id)
+    response = client.data_sources.query(
+        data_source_id=data_source_id,
         filter=query_filter
     )
     
