@@ -35,6 +35,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
+          
+      - name: Debug environment
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "GITHUB_REF=$GITHUB_REF"
+          python --version
+          pip --version
+          python -m pip show garminconnect
+          python -m pip show notion-client
+          python - <<'PY'
+          import garminconnect
+          import notion_client
+          print("garminconnect imported version:", getattr(garminconnect, "__version__", "sin __version__"))
+          print("notion_client imported version:", getattr(notion_client, "__version__", "sin __version__"))
+          PY
+          pip freeze | grep -E 'garminconnect|notion-client|garth'
 
       - name: Run script
         env:
