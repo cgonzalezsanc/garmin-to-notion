@@ -12,7 +12,7 @@ GEAR_IMAGES = {
     "ASICS GEL-Nimbus": "https://i.ibb.co/93NtynVG/ASICS-Gel-Nimbus-24-1920-1-100981.jpg",
     "HOKA Clifton 9": "https://i.ibb.co/1GtnYgFN/clifton-9.jpg",
     "HOKA Skyflow 1": "https://i.ibb.co/1YMvP8zT/Skyflow.jpg",
-    "Saucony Ride 18": "https://i.ibb.co/GffzRrzC/saucony-ride-18-7-1200x690.png",
+    "Saucony Ride 18": "https://www.misterrunning.com/images/2025-media-06/s21000-227_F.jpg",
     "Saucony Endorphin Pro 4": "https://i.ibb.co/Pv1mw8Cs/Endorphin-Pro-4.jpg",
     "Asics Superblast 2": "https://i.ibb.co/F49NZJct/ASICS-Superblast-2.webp",
     "Adidas Adizero EVO SL": "https://i.ibb.co/C50J0CWp/Zapatilla-Adizero-EVO-SL-Plateado-JR3419-01-00-standard.jpg",
