@@ -16,7 +16,8 @@ GEAR_IMAGES = {
     "Saucony Endorphin Pro 4": "https://i.ibb.co/Pv1mw8Cs/Endorphin-Pro-4.jpg",
     "Asics Superblast 2": "https://i.ibb.co/F49NZJct/ASICS-Superblast-2.webp",
     "Adidas Adizero EVO SL": "https://i.ibb.co/C50J0CWp/Zapatilla-Adizero-EVO-SL-Plateado-JR3419-01-00-standard.jpg",
-    "Nike Vomero Plus": "https://static.nike.com/a/images/t_web_pdp_535_v2/f_auto/4746e60f-d845-4f02-a5cf-f06ab8db9312/NIKE+VOMERO+PLUS.png",
+    "Nike Vomero Plus": "https://canarias.base.net/cdn/shop/files/1-original_8ee025da-2323-4178-85b9-82f002332bda.jpg?v=1761112011&width=1500",
+    "ASICS GEL-Kayano 32": "https://dam.elcorteingles.es/producto/www-001017730883216-00.jpg",
     # Add more mappings as needed
 }
 
