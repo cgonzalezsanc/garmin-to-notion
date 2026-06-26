@@ -88,6 +88,7 @@ EXERCISE_NAME_MAP = {
     "DUMBBELL_BICEPS_CURL": "Curl martillo",
     "SEATED_CALF_RAISE": "Gemelos en máquina de prensa",
     "STRAIGHT_ARM_PULLDOWN": "Face pull",
+    "CRUNCH": "Abdominales",
     "UNKNOWN": "Desconocido"
     # aquí puedes ir añadiendo más mappings según vayan saliendo
 }
@@ -95,7 +96,7 @@ EXERCISE_NAME_MAP = {
 # Mapeo de ejercicios a grupos musculares (multi-select)
 EXERCISE_MUSCLE_MAP = {
     "STANDING_EZ_BAR_BICEPS_CURL": ["Biceps"],
-    "STRAIGHT_ARM_PULLDOWN": ["Espalda", "Hombro"],
+    "FACE_PULL": ["Espalda", "Hombro"],
     "INDOOR_ROW": ["Espalda", "Biceps"],
     "BENT_OVER_LATERAL_RAISE": ["Hombro"],
     "DUMBBELL_HAMMER_CURL": ["Biceps"],
@@ -134,6 +135,8 @@ EXERCISE_MUSCLE_MAP = {
     "OVERHEAD_BARBELL_PRESS": ["Hombro", "Triceps"],
     "BARBELL_BACK_SQUAT": ["Cuádriceps", "Glúteos"],
     "SEATED_CALF_RAISE": ["Gemelos"],
+    "STRAIGHT_ARM_PULLDOWN": ["Espalda", "Hombro"],
+    "CRUNCH": ["Abdominales"],
     "UNKNOWN": []
 }
 
