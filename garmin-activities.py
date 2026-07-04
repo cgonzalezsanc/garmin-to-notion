@@ -140,6 +140,39 @@ EXERCISE_MUSCLE_MAP = {
     "UNKNOWN": []
 }
 
+def ensure_select_option_exists(client, database_id, property_name, option_name):
+    db = client.databases.retrieve(database_id=database_id)
+
+    properties = db.get("properties", {})
+    prop = properties.get(property_name)
+
+    if not prop:
+        raise RuntimeError(f"No existe la propiedad {property_name} en la base de datos")
+
+    select_config = prop.get("select")
+    if not select_config:
+        raise RuntimeError(f"La propiedad {property_name} no es de tipo select")
+
+    existing_options = select_config.get("options", [])
+    existing_names = [option["name"] for option in existing_options]
+
+    if option_name in existing_names:
+        return
+
+    new_options = existing_options + [{"name": option_name, "color": "default"}]
+
+    client.databases.update(
+        database_id=database_id,
+        properties={
+            property_name: {
+                "select": {
+                    "options": new_options
+                }
+            }
+        }
+    )
+
+    print(f"Creada nueva opción en Notion: {option_name}")
 
 def get_muscle_groups(subcategoria):
     """Obtiene los grupos musculares para un ejercicio"""
@@ -419,12 +452,26 @@ def exercise_exists(client, database_exercises_id, activity_date, subcategoria):
 def create_exercise_entry(client, database_exercises_id, activity, exercise):
     activity_date = activity.get("startTimeGMT")
 
-    subcategoria = exercise.get("subCategory") or exercise.get("category") or "Unknown"
-    categoria = exercise.get("category", "Unknown")
+    subcategoria = exercise.get("subCategory") or exercise.get("category") or "UNKNOWN"
+    categoria = exercise.get("category", "UNKNOWN")
     repeticiones = exercise.get("reps", 0)
     series = exercise.get("sets", 0)
     volumen_raw = exercise.get("volume", 0)
     peso_max_raw = exercise.get("maxWeight", 0)
+
+    ensure_select_option_exists(
+        client,
+        database_exercises_id,
+        "Subcategoria",
+        subcategoria
+    )
+
+    ensure_select_option_exists(
+        client,
+        database_exercises_id,
+        "Categoria",
+        categoria
+    )
 
     volumen = volumen_raw / 1000 if volumen_raw is not None else 0
     peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
@@ -433,7 +480,6 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
 
     nombre_ejercicio = EXERCISE_NAME_MAP.get(subcategoria, subcategoria)
 
-    # Obtener grupos musculares
     muscle_groups = get_muscle_groups(subcategoria)
     muscle_properties = [{"name": muscle} for muscle in muscle_groups]
 
@@ -455,7 +501,6 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
         "properties": properties,
     }
 
-    # Icono del primer músculo
     if muscle_groups:
         primary_muscle = muscle_groups[0]
         icon_url = MUSCLE_ICON.get(primary_muscle)
@@ -465,7 +510,7 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
     client.pages.create(**page)
     print(f"Created exercise: {nombre_ejercicio}")
 
-def update_exercise_entry(client, existing_page, activity, exercise):
+def update_exercise_entry(client, database_exercises_id, existing_page, activity, exercise):
     activity_date = activity.get("startTimeGMT")
 
     subcategoria = exercise.get("subCategory") or exercise.get("category") or "Unknown"
@@ -474,6 +519,9 @@ def update_exercise_entry(client, existing_page, activity, exercise):
     series = exercise.get("sets", 0)
     volumen_raw = exercise.get("volume", 0)
     peso_max_raw = exercise.get("maxWeight", 0)
+
+    ensure_select_option_exists(client, database_exercises_id, "Subcategoria", subcategoria)
+    ensure_select_option_exists(client, database_exercises_id, "Categoria", categoria)
 
     volumen = volumen_raw / 1000 if volumen_raw is not None else 0
     peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
@@ -536,7 +584,7 @@ def get_activity_detail(client, activity, activity_type, database_exercises_id):
         )
 
         if existing:
-            update_exercise_entry(client, existing, activity, s)
+            update_exercise_entry(client, database_exercises_id, existing, activity, s)
         else:
             create_exercise_entry(client, database_exercises_id, activity, s)
 
