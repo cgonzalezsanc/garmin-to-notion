@@ -140,40 +140,6 @@ EXERCISE_MUSCLE_MAP = {
     "UNKNOWN": []
 }
 
-def ensure_select_option_exists(client, database_id, property_name, option_name):
-    db = client.databases.retrieve(database_id=database_id)
-
-    properties = db.get("properties", {})
-    prop = properties.get(property_name)
-
-    if not prop:
-        raise RuntimeError(f"No existe la propiedad {property_name} en la base de datos")
-
-    select_config = prop.get("select")
-    if not select_config:
-        raise RuntimeError(f"La propiedad {property_name} no es de tipo select")
-
-    existing_options = select_config.get("options", [])
-    existing_names = [option["name"] for option in existing_options]
-
-    if option_name in existing_names:
-        return
-
-    new_options = existing_options + [{"name": option_name, "color": "default"}]
-
-    client.databases.update(
-        database_id=database_id,
-        properties={
-            property_name: {
-                "select": {
-                    "options": new_options
-                }
-            }
-        }
-    )
-
-    print(f"Creada nueva opción en Notion: {option_name}")
-
 def get_muscle_groups(subcategoria):
     """Obtiene los grupos musculares para un ejercicio"""
     return EXERCISE_MUSCLE_MAP.get(subcategoria.upper(), [])
@@ -261,6 +227,80 @@ def get_data_source_id(client, database_id):
     if not data_sources:
         raise RuntimeError(f"No data_sources found for database {database_id}")
     return data_sources[0]["id"]
+
+_SELECT_OPTIONS_CACHE = {}
+
+def ensure_select_option_exists(client, database_id, property_name, option_name):
+    """
+    Comprueba si una opción existe en una propiedad select de Notion.
+    Si no existe, la crea automáticamente en la data source.
+    """
+
+    if not option_name:
+        option_name = "UNKNOWN"
+
+    option_name = option_name.upper()
+
+    cache_key = (database_id, property_name)
+
+    data_source_id = get_data_source_id(client, database_id)
+
+    if cache_key not in _SELECT_OPTIONS_CACHE:
+        data_source = client.data_sources.retrieve(
+            data_source_id=data_source_id
+        )
+
+        properties = data_source.get("properties", {})
+        prop = properties.get(property_name)
+
+        if not prop:
+            raise RuntimeError(
+                f"No existe la propiedad '{property_name}' en la base de datos"
+            )
+
+        if prop.get("type") != "select":
+            raise RuntimeError(
+                f"La propiedad '{property_name}' no es de tipo select"
+            )
+
+        existing_options = prop.get("select", {}).get("options", [])
+
+        _SELECT_OPTIONS_CACHE[cache_key] = {
+            option["name"]: option
+            for option in existing_options
+        }
+
+    existing_options_dict = _SELECT_OPTIONS_CACHE[cache_key]
+
+    if option_name in existing_options_dict:
+        return option_name
+
+    print(f"Creando nueva opción en Notion: {property_name} = {option_name}")
+
+    new_options = list(existing_options_dict.values()) + [
+        {
+            "name": option_name,
+            "color": "default"
+        }
+    ]
+
+    client.data_sources.update(
+        data_source_id=data_source_id,
+        properties={
+            property_name: {
+                "select": {
+                    "options": new_options
+                }
+            }
+        }
+    )
+
+    existing_options_dict[option_name] = {
+        "name": option_name,
+        "color": "default"
+    }
+
+    return option_name
 
 def activity_exists(client, database_id, activity_date, activity_type, activity_name):
     dt = datetime.strptime(activity_date, "%Y-%m-%d %H:%M:%S")
@@ -453,25 +493,25 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
     activity_date = activity.get("startTimeGMT")
 
     subcategoria = exercise.get("subCategory") or exercise.get("category") or "UNKNOWN"
-    categoria = exercise.get("category", "UNKNOWN")
-    repeticiones = exercise.get("reps", 0)
-    series = exercise.get("sets", 0)
-    volumen_raw = exercise.get("volume", 0)
-    peso_max_raw = exercise.get("maxWeight", 0)
-
-    ensure_select_option_exists(
+    categoria = exercise.get("category") or "UNKNOWN"
+    
+    subcategoria = ensure_select_option_exists(
         client,
         database_exercises_id,
         "Subcategoria",
         subcategoria
     )
-
-    ensure_select_option_exists(
+    
+    categoria = ensure_select_option_exists(
         client,
         database_exercises_id,
         "Categoria",
         categoria
     )
+    repeticiones = exercise.get("reps", 0)
+    series = exercise.get("sets", 0)
+    volumen_raw = exercise.get("volume", 0)
+    peso_max_raw = exercise.get("maxWeight", 0)
 
     volumen = volumen_raw / 1000 if volumen_raw is not None else 0
     peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
@@ -513,15 +553,26 @@ def create_exercise_entry(client, database_exercises_id, activity, exercise):
 def update_exercise_entry(client, database_exercises_id, existing_page, activity, exercise):
     activity_date = activity.get("startTimeGMT")
 
-    subcategoria = exercise.get("subCategory") or exercise.get("category") or "Unknown"
-    categoria = exercise.get("category", "Unknown")
+    subcategoria = exercise.get("subCategory") or exercise.get("category") or "UNKNOWN"
+    categoria = exercise.get("category") or "UNKNOWN"
+    
+    subcategoria = ensure_select_option_exists(
+        client,
+        database_exercises_id,
+        "Subcategoria",
+        subcategoria
+    )
+    
+    categoria = ensure_select_option_exists(
+        client,
+        database_exercises_id,
+        "Categoria",
+        categoria
+    )
     repeticiones = exercise.get("reps", 0)
     series = exercise.get("sets", 0)
     volumen_raw = exercise.get("volume", 0)
     peso_max_raw = exercise.get("maxWeight", 0)
-
-    ensure_select_option_exists(client, database_exercises_id, "Subcategoria", subcategoria)
-    ensure_select_option_exists(client, database_exercises_id, "Categoria", categoria)
 
     volumen = volumen_raw / 1000 if volumen_raw is not None else 0
     peso_maximo = peso_max_raw / 1000 if peso_max_raw is not None else 0
@@ -574,7 +625,13 @@ def get_activity_detail(client, activity, activity_type, database_exercises_id):
     summarized_sets = activity.get("summarizedExerciseSets", []) or []
 
     for s in summarized_sets:
-        subcategoria = s.get("subCategory") or s.get("category") or "Unknown"
+        subcategoria = s.get("subCategory") or s.get("category") or "UNKNOWN"
+        subcategoria = ensure_select_option_exists(
+            client,
+            database_exercises_id,
+            "Subcategoria",
+            subcategoria
+        )
 
         existing = exercise_exists(
             client,
