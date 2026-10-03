@@ -15,6 +15,11 @@ on:
         description: 'Dry run (no escribe en Notion)'
         type: boolean
         default: false
+      informe:
+        description: 'Informe a generar (auto = según la hora de Madrid)'
+        type: choice
+        options: [auto, diario, pre-carrera]
+        default: auto
 env:
   TZ: 'Europe/Madrid'
 
@@ -73,3 +78,20 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           python main.py
+
+      - name: Daily report
+        # Se ejecuta aunque la sincronización haya fallado en algún script
+        if: always()
+        env:
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          TZ: 'Europe/Madrid'
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          INFORME: ${{ github.event.inputs.informe || 'auto' }}
+        run: |
+          if [ "$INFORME" = "auto" ]; then
+            python daily_report.py
+          else
+            python daily_report.py --tipo "$INFORME"
+          fi

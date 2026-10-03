@@ -6,4 +6,3 @@ python-dotenv
 withings-sync==4.2.4
 lxml>=4.6.0,<5.0
 tzdata
-anthropic>=1.0

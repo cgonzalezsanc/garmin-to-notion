@@ -1,20 +1,31 @@
 """
 Informe diario de entrenamiento.
 
-Fase 3: calcula de forma determinista las métricas del día a partir de Notion
-(y de Garmin para la línea base de HRV) y las imprime como JSON en el log.
+1. Calcula de forma determinista las métricas del día a partir de Notion (y de
+   Garmin para la línea base de HRV) y las imprime como JSON en el log.
+2. Aplica reglas heurísticas (sacadas de la página "Contexto entrenador") para
+   el semáforo y la sesión ajustada, y escribe una página en "Informes diarios".
+3. Una rutina de Claude (suscripción) revisa después las páginas con
+   "Revisado Claude" desmarcado y redacta el informe final.
+
+Cuándo genera informe (hora de Madrid), salvo que se fuerce con --tipo:
+- 08:00-15:59  Diario si aún no existe, o si existe con "Datos incompletos"
+               (lo regenera en la misma página). Si existe completo, no hace nada.
+- 20:00-23:59  Pre-carrera, solo si en el Plan hay Competición mañana.
 
 Uso:
     python daily_report.py --dry-run
-    python daily_report.py --fecha 2026-10-03     # calcular para otro día
+    python daily_report.py --tipo diario            # forzar (p.ej. lanzado a mano)
+    python daily_report.py --fecha 2026-10-03 --tipo diario
 """
 import argparse
 import json
 import os
 import statistics
+import traceback
 from datetime import date, datetime, timedelta, timezone
 
-from common import MADRID_TZ, get_garmin, get_notion, now_madrid, query_all
+from common import MADRID_TZ, get_garmin, get_notion, now_madrid, query_all, ensure_properties
 
 # IDs de data sources (API 2025-09-03). Se pueden sobrescribir por entorno.
 DS_ACTIVIDADES = os.getenv("NOTION_DS_ACTIVIDADES", "251bb6e9-4ddc-81e5-9a4c-000b38da493d")
@@ -23,6 +34,13 @@ DS_EJERCICIOS = os.getenv("NOTION_DS_EJERCICIOS", "2c9bb6e9-4ddc-8045-8947-000b7
 DS_CARRERAS = os.getenv("NOTION_DS_CARRERAS", "260bb6e9-4ddc-8004-a2f6-000be5be46de")
 DS_PLAN = os.getenv("NOTION_DS_PLAN", "59f320f1-acce-40f0-bdd9-ffe2bbcdefd0")
 DS_INFORMES = os.getenv("NOTION_DS_INFORMES", "f2cc4735-d45f-471b-9dfb-de87cf944b52")
+DB_INFORMES = os.getenv("NOTION_REPORTS_DB_ID", "47ba50c01a9c49e2b0e13dc6c2973b7e")
+
+# Usuario de Notion al que se menciona para que llegue la notificación
+NOTIFY_USER_ID = os.getenv("NOTION_NOTIFY_USER_ID", "250d872b-594c-818a-975e-000251ce5736")
+
+QUALITY_TYPES = {"Umbral", "Series", "Tempo", "Competición", "Tirada larga"}
+RUN_TYPES = QUALITY_TYPES | {"Rodaje"}
 
 LEG_GROUPS = {"Cuadriceps", "Cuádriceps", "Isquiotibiales", "Glúteos", "Gemelos"}
 
@@ -242,19 +260,298 @@ def compute_metrics(client, garmin, today):
     return metrics
 
 
+# ---------------------------------------------------------------------------
+# Reglas (heurísticas, no validadas; ver página "Contexto entrenador")
+# ---------------------------------------------------------------------------
+
+DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+
+def session_label(s):
+    if not s:
+        return "Sin sesión planificada"
+    parts = [s["sesion"] or s["tipo"] or "Sesión"]
+    if s.get("fc_techo"):
+        parts.append(f"FC techo {s['fc_techo']}")
+    if s.get("ritmo_objetivo"):
+        parts.append(f"ritmo {s['ritmo_objetivo']}")
+    return " · ".join(parts)
+
+
+def apply_rules(m, tipo):
+    """Devuelve (semaforo, sesion_ajustada, motivos, avisos). Solo heurísticas explícitas."""
+    red, yellow, info = [], [], []
+    sesion = m["sesion_hoy"][0] if m["sesion_hoy"] else None
+    tipo_sesion = sesion["tipo"] if sesion else None
+
+    rhr, base = m["fc_reposo_hoy"], m["fc_reposo_base_28d"]
+    if rhr and base:
+        diff = rhr - base
+        if diff >= 7:
+            red.append(f"FC reposo {rhr} ppm, +{diff:g} sobre la base de 28 días ({base:g}).")
+        elif diff >= 4:
+            yellow.append(f"FC reposo {rhr} ppm, +{diff:g} sobre la base de 28 días ({base:g}).")
+
+    status = (m["hrv_status"] or "").lower()
+    if status in ("low", "poor"):
+        red.append(f"HRV {m['hrv_hoy']} ms con estado '{m['hrv_status']}' según Garmin.")
+    elif status == "unbalanced":
+        yellow.append(f"HRV {m['hrv_hoy']} ms con estado 'Unbalanced' según Garmin.")
+    else:
+        b = m["hrv_baseline_garmin"] or {}
+        if m["hrv_hoy"] and b.get("balanced_low") and m["hrv_hoy"] < b["balanced_low"]:
+            yellow.append(f"HRV {m['hrv_hoy']} ms, por debajo de tu rango normal ({b['balanced_low']}-{b['balanced_upper']}).")
+
+    sleep = m["sueno_h"]
+    if sleep is not None:
+        if sleep < 5:
+            red.append(f"Solo {sleep} h de sueño.")
+        elif sleep < 6.5:
+            yellow.append(f"Sueño corto: {sleep} h.")
+
+    tr = m["training_readiness"]
+    if tr is not None:
+        if tr < 25:
+            red.append(f"Training Readiness {tr} (muy baja).")
+        elif tr < 50:
+            yellow.append(f"Training Readiness {tr} (baja).")
+
+    if m["ratio_carga"] and m["ratio_carga"] > 1.3:
+        yellow.append(f"Carga de 7 días {m['km_corridos_7d']} km vs media {m['km_corridos_media_28d']} km/semana "
+                      f"(ratio {m['ratio_carga']}). Heurístico, evidencia débil.")
+
+    if m["dias_seguidos_corriendo"] >= 3 and tipo_sesion in RUN_TYPES:
+        yellow.append(f"Llevas {m['dias_seguidos_corriendo']} días seguidos corriendo (regla: máximo 3 en descarga).")
+
+    if m["pierna_48h"] and tipo_sesion in QUALITY_TYPES:
+        yellow.append("Gimnasio de pierna en las últimas 48 h antes de una sesión de calidad "
+                      "(la fatiga muscular local no se ve en la FC).")
+    elif m["pierna_48h"]:
+        info.append("Hubo gimnasio de pierna en las últimas 48 h.")
+
+    if m["datos_incompletos"]:
+        info.append(f"Faltan datos: {', '.join(m['datos_que_faltan'])}. No se infieren.")
+
+    if not any(m[k] is not None for k in ("sueno_h", "hrv_hoy", "fc_reposo_hoy", "training_readiness")):
+        semaforo = "Sin datos"
+    elif red:
+        semaforo = "Rojo"
+    elif yellow:
+        semaforo = "Amarillo"
+    else:
+        semaforo = "Verde"
+
+    planned = session_label(sesion)
+    if not sesion or tipo_sesion in ("Descanso", "Gimnasio"):
+        ajustada = planned
+    elif semaforo == "Rojo":
+        ajustada = "Descanso, o como mucho 30-40' muy suaves por debajo de 130 ppm"
+    elif semaforo == "Amarillo" and tipo_sesion in QUALITY_TYPES:
+        km = f"{sesion['km_objetivo']:g} km" if sesion.get("km_objetivo") else "rodaje"
+        ajustada = f"Cambiar la calidad por un rodaje fácil ({km}) con techo de 142 ppm"
+    else:
+        ajustada = planned
+
+    return semaforo, ajustada, red + yellow, info
+
+
+# ---------------------------------------------------------------------------
+# Escritura en Notion
+# ---------------------------------------------------------------------------
+
+def _rt(text):
+    """Texto -> rich_text de Notion, troceado en bloques de 2000 caracteres."""
+    return [{"type": "text", "text": {"content": text[i:i + 2000]}} for i in range(0, len(text), 2000)] or []
+
+
+def markdown_to_blocks(md):
+    """Conversión mínima: '## ' títulos, '- ' viñetas, resto párrafos."""
+    blocks = []
+    for line in md.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        if line.startswith("### "):
+            blocks.append({"type": "heading_3", "heading_3": {"rich_text": _rt(line[4:])}})
+        elif line.startswith("## "):
+            blocks.append({"type": "heading_2", "heading_2": {"rich_text": _rt(line[3:])}})
+        elif line.startswith(("- ", "* ")):
+            blocks.append({"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": _rt(line[2:])}})
+        else:
+            blocks.append({"type": "paragraph", "paragraph": {"rich_text": _rt(line)}})
+    return blocks
+
+
+def build_body(m, tipo, semaforo, ajustada, motivos, info, error=None):
+    sesion = m["sesion_hoy"][0] if m["sesion_hoy"] else None
+    lines = ["## Estado", f"Semáforo **{semaforo}** (reglas automáticas, heurísticas)."]
+    lines.append(
+        f"Sueño {m['sueno_h'] if m['sueno_h'] is not None else '—'} h (score {m['sueno_score'] or '—'}) · "
+        f"HRV {m['hrv_hoy'] or '—'} ms ({m['hrv_status'] or '—'}) · "
+        f"FC reposo {m['fc_reposo_hoy'] or '—'} (base {m['fc_reposo_base_28d'] or '—'}) · "
+        f"Readiness {m['training_readiness'] if m['training_readiness'] is not None else '—'} · "
+        f"Body Battery {m['body_battery_manana'] if m['body_battery_manana'] is not None else '—'}")
+    lines.append(f"Km corridos 7 d: {m['km_corridos_7d']} · media 28 d: {m['km_corridos_media_28d']} km/sem · "
+                 f"días seguidos corriendo: {m['dias_seguidos_corriendo']}")
+    lines.append("## Motivos")
+    lines += [f"- {x}" for x in motivos] or ["- Ninguna regla de alerta se ha disparado."]
+    if tipo == "Pre-carrera":
+        lines.append("## Carrera de mañana")
+        manana = [s for s in m["plan_7d"] if s["tipo"] == "Competición"]
+        for s in manana[:1]:
+            lines.append(f"- {session_label(s)}")
+            if s.get("detalle"):
+                lines.append(f"- {s['detalle']}")
+            if s.get("fc_techo"):
+                lines.append(f"- Carrera de entrenamiento: no pasar de {s['fc_techo']} ppm.")
+    else:
+        lines.append("## Sesión de hoy")
+        lines.append(f"- Planificada: {session_label(sesion)}")
+        lines.append(f"- Ajustada: {ajustada}")
+        if sesion and sesion.get("detalle"):
+            lines.append(f"- {sesion['detalle']}")
+    if info or m["avisos"] or error:
+        lines.append("## Avisos")
+        lines += [f"- {x}" for x in info + m["avisos"]]
+        if error:
+            lines.append(f"- Error al generar el informe: {error}")
+    if m["proxima_carrera"]:
+        r = m["proxima_carrera"]
+        lines.append(f"Próxima carrera: {r['nombre']} ({r['fecha']}, faltan {r['dias']} días).")
+    return "\n".join(lines).replace("**", "")
+
+
+def find_report(client, day, tipo):
+    rows = client.data_sources.query(
+        data_source_id=DS_INFORMES,
+        filter={"and": [
+            {"property": "Fecha", "date": {"equals": day.isoformat()}},
+            {"property": "Tipo", "select": {"equals": tipo}},
+        ]},
+    ).get("results", [])
+    return rows[0] if rows else None
+
+
+def write_report(client, existing, day, tipo, m, semaforo, ajustada, title, body):
+    sesion = m["sesion_hoy"][0] if m["sesion_hoy"] else None
+    properties = {
+        "Informe": {"title": _rt(title)},
+        "Fecha": {"date": {"start": day.isoformat()}},
+        "Semáforo": {"select": {"name": semaforo}},
+        "Tipo": {"select": {"name": tipo}},
+        "Sesión planificada": {"rich_text": _rt(session_label(sesion) if sesion else "")},
+        "Sesión ajustada": {"rich_text": _rt(ajustada)},
+        "Km corridos 7d": {"number": m["km_corridos_7d"]},
+        "Km corridos media 28d": {"number": m["km_corridos_media_28d"]},
+        "FC reposo": {"number": m["fc_reposo_hoy"]},
+        "FC reposo base 28d": {"number": m["fc_reposo_base_28d"]},
+        "HRV": {"number": m["hrv_hoy"]},
+        "Sueño (h)": {"number": m["sueno_h"]},
+        "Training Readiness": {"number": m["training_readiness"]},
+        "Días seguidos corriendo": {"number": m["dias_seguidos_corriendo"]},
+        "Datos incompletos": {"checkbox": m["datos_incompletos"]},
+        "Revisado Claude": {"checkbox": False},
+    }
+
+    mention = {"type": "paragraph", "paragraph": {"rich_text": [
+        {"type": "mention", "mention": {"type": "user", "user": {"id": NOTIFY_USER_ID}}},
+        {"type": "text", "text": {"content": f" informe {tipo.lower()} listo."}},
+    ]}}
+    metrics_block = {"type": "toggle", "toggle": {
+        "rich_text": _rt("Métricas (JSON para la revisión de Claude)"),
+        "children": [{"type": "code", "code": {"language": "json", "rich_text": _rt(
+            json.dumps(m, ensure_ascii=False, indent=1, default=str))}}],
+    }}
+    children = [mention] + markdown_to_blocks(body) + [metrics_block]
+
+    if existing:
+        page_id = existing["id"]
+        client.pages.update(page_id=page_id, properties=properties)
+        # Sustituye el contenido de la página
+        old = client.blocks.children.list(block_id=page_id).get("results", [])
+        for b in old:
+            client.blocks.delete(block_id=b["id"])
+        client.blocks.children.append(block_id=page_id, children=children)
+        print(f"Informe actualizado: {title}")
+    else:
+        page = client.pages.create(parent={"type": "data_source_id", "data_source_id": DS_INFORMES},
+                                   icon={"type": "emoji", "emoji": {"Verde": "🟢", "Amarillo": "🟡", "Rojo": "🔴"}.get(semaforo, "⚪")},
+                                   properties=properties, children=children)
+        print(f"Informe creado: {title} ({page.get('url', page.get('id'))})")
+
+
+def decide_tipo(now, client, day, forced):
+    """Devuelve el tipo de informe a generar ahora, o None. Ver docstring del módulo."""
+    if forced:
+        return {"diario": "Diario", "pre-carrera": "Pre-carrera"}[forced]
+    h = now.hour
+    if 8 <= h < 16:
+        existing = find_report(client, day, "Diario")
+        if existing is None or prop(existing, "Datos incompletos"):
+            return "Diario"
+        print("El informe diario de hoy ya existe y está completo.")
+        return None
+    if h >= 20:
+        tomorrow = (day + timedelta(days=1)).isoformat()
+        rows = client.data_sources.query(data_source_id=DS_PLAN, filter={"and": [
+            {"property": "Fecha", "date": {"equals": tomorrow}},
+            {"property": "Tipo", "select": {"equals": "Competición"}},
+        ]}).get("results", [])
+        if rows and find_report(client, day, "Pre-carrera") is None:
+            return "Pre-carrera"
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fecha", help="Fecha del informe (YYYY-MM-DD). Por defecto, hoy en Madrid.")
+    parser.add_argument("--tipo", choices=["diario", "pre-carrera"], help="Fuerza el informe aunque no toque por la hora")
     args = parser.parse_args()
 
-    today = date.fromisoformat(args.fecha) if args.fecha else now_madrid().date()
-    garmin = get_garmin()
+    now = now_madrid()
+    today = date.fromisoformat(args.fecha) if args.fecha else now.date()
     client = get_notion()
 
-    metrics = compute_metrics(client, garmin, today)
+    tipo = decide_tipo(now, client, today, args.tipo)
+    if not tipo:
+        print(f"{now:%H:%M} Madrid: no toca generar informe.")
+        return
+    print(f"Generando informe {tipo} para {today}")
+
+    ensure_properties(client, DB_INFORMES, {"Revisado Claude": {"checkbox": {}}})
+    existing = find_report(client, today, tipo)
+
+    try:
+        metrics = compute_metrics(client, get_garmin(), today)
+    except Exception as e:
+        # Fallo controlado: el workflow no falla, pero queda registrado
+        traceback.print_exc()
+        print(f"ERROR calculando métricas: {e}")
+        return
+
     print("MÉTRICAS DEL INFORME:")
     print(json.dumps(metrics, ensure_ascii=False, indent=1, default=str))
+
+    error = None
+    try:
+        semaforo, ajustada, motivos, info = apply_rules(metrics, tipo)
+    except Exception as e:
+        traceback.print_exc()
+        semaforo, ajustada, motivos, info, error = "Sin datos", "", [], [], str(e)
+
+    sesion = metrics["sesion_hoy"][0] if metrics["sesion_hoy"] else None
+    resumen = "Sin sesión" if not sesion else (
+        f"{sesion['sesion']} se mantiene" if ajustada == session_label(sesion) else f"{sesion['sesion']} → ajustar")
+    prefix = "Pre-carrera · " if tipo == "Pre-carrera" else ""
+    title = f"{DIAS[today.weekday()]} {today:%d/%m} · {prefix}{semaforo} · {resumen}"
+    body = build_body(metrics, tipo, semaforo, ajustada, motivos, info, error)
+
+    try:
+        write_report(client, existing, today, tipo, metrics, semaforo, ajustada, title, body)
+    except Exception as e:
+        traceback.print_exc()
+        print(f"ERROR escribiendo el informe en Notion: {e}")
 
 
 if __name__ == "__main__":
