@@ -1,10 +1,88 @@
 from datetime import date, datetime, timedelta, UTC
-from common import get_garmin, get_notion, get_data_source_id
+from common import get_garmin, get_notion, get_data_source_id, ensure_properties, MADRID_TZ
 import pytz
 import os
 
 # Constants
 local_tz = pytz.timezone("Europe/Madrid")
+
+# Propiedades nuevas del Registro de sueño (fase 1). Se crean si no existen.
+NEW_SLEEP_PROPERTIES = {
+    "HRV (ms)": {"number": {}},
+    "HRV status": {"select": {}},
+    "Body Battery mañana": {"number": {}},
+    "Training Readiness": {"number": {}},
+    "Carga aguda": {"number": {}},
+    "Training Status": {"select": {}},
+}
+
+
+def _safe(fn, label):
+    try:
+        return fn()
+    except Exception as e:
+        print(f"  Aviso: sin datos de {label} ({e})")
+        return None
+
+
+def _phrase(text):
+    """'PRODUCTIVE_3' -> 'Productive', 'BALANCED' -> 'Balanced'."""
+    if not text:
+        return None
+    base = text.rsplit("_", 1)[0] if text.rsplit("_", 1)[-1].isdigit() else text
+    return base.replace("_", " ").capitalize()
+
+
+def get_recovery_data(garmin, sleep_date):
+    """
+    HRV, Body Battery de la mañana, Training Readiness al despertar y carga/estado
+    de entrenamiento para un día. Lo que Garmin no devuelva queda en None.
+    """
+    data = {"hrv": None, "hrv_status": None, "bb_morning": None,
+            "readiness": None, "acute_load": None, "training_status": None}
+
+    hrv = _safe(lambda: garmin.get_hrv_data(sleep_date), "HRV") or {}
+    summary = hrv.get("hrvSummary") or {}
+    data["hrv"] = summary.get("lastNightAvg")
+    data["hrv_status"] = _phrase(summary.get("status"))
+
+    # Body Battery: máximo antes de las 12:00 (hora de Madrid)
+    bb = _safe(lambda: garmin.get_body_battery(sleep_date), "Body Battery") or []
+    morning = []
+    for day in bb:
+        for ts, level in day.get("bodyBatteryValuesArray") or []:
+            if ts is None or level is None:
+                continue
+            local = datetime.fromtimestamp(ts / 1000, MADRID_TZ)
+            if local.date().isoformat() == sleep_date and local.hour < 12:
+                morning.append(level)
+    data["bb_morning"] = max(morning) if morning else None
+
+    # Training Readiness calculada al despertar (luego Garmin la recalcula durante el día)
+    tr = _safe(lambda: garmin.get_morning_training_readiness(sleep_date), "Training Readiness") or {}
+    data["readiness"] = tr.get("score")
+
+    status = _safe(lambda: garmin.get_training_status(sleep_date), "Training Status") or {}
+    devices = ((status.get("mostRecentTrainingStatus") or {}).get("latestTrainingStatusData") or {}).values()
+    device = next((d for d in devices if d.get("primaryTrainingDevice")), next(iter(devices), None))
+    if device and device.get("calendarDate") == sleep_date:
+        data["acute_load"] = (device.get("acuteTrainingLoadDTO") or {}).get("dailyTrainingLoadAcute")
+        data["training_status"] = _phrase(device.get("trainingStatusFeedbackPhrase"))
+
+    return data
+
+
+def recovery_properties(data):
+    def select(value):
+        return {"select": {"name": value} if value else None}
+    return {
+        "HRV (ms)": {"number": data["hrv"]},
+        "HRV status": select(data["hrv_status"]),
+        "Body Battery mañana": {"number": data["bb_morning"]},
+        "Training Readiness": {"number": data["readiness"]},
+        "Carga aguda": {"number": data["acute_load"]},
+        "Training Status": select(data["training_status"]),
+    }
 
 def get_sleep_data(garmin):
     today = datetime.today().date()
@@ -29,7 +107,7 @@ def format_time_readable(timestamp):
 def format_date_for_name(sleep_date):
     return datetime.strptime(sleep_date, "%Y-%m-%d").strftime("%d.%m.%Y") if sleep_date else "Unknown"
 
-def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
+def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True, garmin=None):
     daily_sleep = sleep_data.get('dailySleepDTO', {})
     if not daily_sleep:
         return
@@ -64,6 +142,11 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
         "Score": {"number": daily_sleep.get('sleepScores', {}).get('overall', {}).get('value', None)}
     }
 
+    if garmin is not None:
+        recovery = get_recovery_data(garmin, sleep_date)
+        print(f"  Recuperación {sleep_date}: {recovery}")
+        properties.update(recovery_properties(recovery))
+
     # Filtro para comprobar si ya existe la entrada
     query_filter = {"property": "Long Date", "date": {"equals": sleep_date}}
 
@@ -91,6 +174,8 @@ def main(garmin=None, client=None):
     garmin = garmin or get_garmin()
     client = client or get_notion()
 
+    ensure_properties(client, database_id, NEW_SLEEP_PROPERTIES)
+
     """
     Get last x days of daily step count data from Garmin Connect.
     """
@@ -105,7 +190,7 @@ def main(garmin=None, client=None):
             sleep_date = daily_sleep.get('dailySleepDTO', {}).get('calendarDate')
             # if sleep_date and not sleep_data_exists(client, database_id, sleep_date):
             if sleep_date:
-                create_sleep_data(client, database_id, daily_sleep, skip_zero_sleep=True)
+                create_sleep_data(client, database_id, daily_sleep, skip_zero_sleep=True, garmin=garmin)
 
 if __name__ == '__main__':
     main()

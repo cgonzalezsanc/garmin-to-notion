@@ -118,6 +118,34 @@ def get_data_source_id(client, database_id):
     return _DATA_SOURCE_IDS[database_id]
 
 
+_ENSURED = set()
+
+
+def ensure_properties(client, database_id, schema):
+    """
+    Crea en la base de datos las propiedades de `schema` que no existan.
+    Nunca renombra ni borra propiedades existentes.
+    schema: {"Nombre": {"number": {}}, "Otro": {"rich_text": {}}, ...}
+    """
+    if database_id in _ENSURED:
+        return
+    data_source_id = get_data_source_id(client, database_id)
+    existing = client.data_sources.retrieve(data_source_id=data_source_id).get("properties", {})
+    missing = {name: definition for name, definition in schema.items() if name not in existing}
+    if missing:
+        print(f"Creando propiedades nuevas en Notion: {', '.join(missing)}")
+        client.data_sources.update(data_source_id=data_source_id, properties=missing)
+    _ENSURED.add(database_id)
+
+
+def format_pace_ms(speed_ms):
+    """Velocidad en m/s -> 'm:ss' por km. None si no hay dato."""
+    if not speed_ms or speed_ms <= 0:
+        return None
+    total = round(1000 / speed_ms)
+    return f"{total // 60}:{total % 60:02d}"
+
+
 def query_all(client, data_source_id, **kwargs):
     """Consulta una data source paginando hasta traer todos los resultados."""
     results, cursor = [], None

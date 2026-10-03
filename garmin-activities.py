@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from common import get_garmin, get_notion, get_data_source_id
+from common import get_garmin, get_notion, get_data_source_id, ensure_properties, format_pace_ms
 import pytz
 import os
 
@@ -137,6 +137,98 @@ EXERCISE_MUSCLE_MAP = {
     "CRUNCH": ["Abdominales"],
     "UNKNOWN": []
 }
+
+# Propiedades nuevas de Actividades (fase 1). Se crean si no existen.
+NEW_ACTIVITY_PROPERTIES = {
+    "Elev Gain (m)": {"number": {}},
+    "Elev Loss (m)": {"number": {}},
+    "Temp (°C)": {"rich_text": {}},
+    "Cadence": {"number": {}},
+    "GAP": {"rich_text": {}},
+    "Max HR": {"number": {}},
+    "Km corridos": {"number": {}},
+}
+
+# Más rápido que 8:00/km cuenta como corrido
+RUN_SPEED_THRESHOLD = 1000 / (8 * 60)  # m/s
+
+
+def _round_or_none(value, ndigits=0):
+    if value is None:
+        return None
+    return round(value, ndigits) if ndigits else round(value)
+
+
+def _text(value):
+    return {"rich_text": [{"text": {"content": value}}] if value else []}
+
+
+def format_temperature(activity):
+    """Garmin solo da mín./máx. (no media) y no en todas las actividades."""
+    t_min, t_max = activity.get('minTemperature'), activity.get('maxTemperature')
+    if t_min is None and t_max is None:
+        return None
+    if t_min is None or t_max is None or round(t_min) == round(t_max):
+        return f"{round(t_min if t_min is not None else t_max)}"
+    return f"{round(t_min)}–{round(t_max)}"
+
+
+def compute_km_corridos(garmin, activity, activity_type):
+    """
+    Km corridos (no andados) de una actividad:
+    - No running -> 0.
+    - Running sin laps -> Distance.
+    - Todos los laps más rápidos que 8:00/km -> Distance.
+    - Si hay laps lentos (correr/andar mezclado) -> suma de la distancia de la
+      serie temporal donde la velocidad instantánea es más rápida que 8:00/km.
+    """
+    distance_km = round((activity.get('distance') or 0) / 1000, 2)
+    if activity_type != "Running":
+        return 0
+    activity_id = str(activity.get('activityId'))
+
+    try:
+        laps = garmin.get_activity_splits(activity_id).get("lapDTOs") or []
+    except Exception as e:
+        print(f"  Aviso: sin splits para {activity_id} ({e}); Km corridos = Distance")
+        return distance_km
+    laps = [l for l in laps if (l.get("distance") or 0) > 0]
+    if not laps or all((l.get("averageSpeed") or 0) > RUN_SPEED_THRESHOLD for l in laps):
+        return distance_km
+
+    try:
+        details = garmin.get_activity_details(activity_id, maxchart=100000)
+        keys = {m["key"]: m["metricsIndex"] for m in details["metricDescriptors"]}
+        i_dist, i_speed = keys["sumDistance"], keys["directSpeed"]
+        rows = [r["metrics"] for r in details.get("activityDetailMetrics", [])]
+        run_m = 0.0
+        for prev, cur in zip(rows, rows[1:]):
+            if cur[i_dist] is None or prev[i_dist] is None:
+                continue
+            if (cur[i_speed] or 0) > RUN_SPEED_THRESHOLD:
+                run_m += cur[i_dist] - prev[i_dist]
+        km = round(run_m / 1000, 2)
+        print(f"  Km corridos (serie temporal) {activity.get('activityName')}: {km} de {distance_km} km")
+        return min(km, distance_km)
+    except Exception as e:
+        # Sin serie temporal: suma de laps rápidos
+        km = round(sum(l["distance"] for l in laps if (l.get("averageSpeed") or 0) > RUN_SPEED_THRESHOLD) / 1000, 2)
+        print(f"  Aviso: sin serie temporal para {activity_id} ({e}); Km corridos por laps = {km}")
+        return km
+
+
+def new_metrics_properties(activity):
+    """Propiedades nuevas que vienen directamente en la lista de actividades de Garmin."""
+    cadence = activity.get('averageRunningCadenceInStepsPerMinute') or activity.get('averageBikingCadenceInRevPerMinute')
+    return {
+        "Elev Gain (m)": {"number": _round_or_none(activity.get('elevationGain'))},
+        "Elev Loss (m)": {"number": _round_or_none(activity.get('elevationLoss'))},
+        "Temp (°C)": _text(format_temperature(activity)),
+        "Cadence": {"number": _round_or_none(cadence)},
+        "GAP": _text(format_pace_ms(activity.get('avgGradeAdjustedSpeed'))),
+        "Max HR": {"number": _round_or_none(activity.get('maxHR'))},
+    }
+
 
 def get_muscle_groups(subcategoria):
     """Obtiene los grupos musculares para un ejercicio"""
@@ -365,7 +457,7 @@ def activity_needs_update(existing_activity, new_activity):
         (not has_subactivity)  # If the property doesn't exist, we need an update
     )
 
-def create_activity(client, database_id, activity, train_type):
+def create_activity(client, database_id, activity, train_type, km_corridos=None):
 
     # Create a new activity in the Notion database
     activity_date = activity.get('startTimeGMT')
@@ -400,6 +492,9 @@ def create_activity(client, database_id, activity, train_type):
         "PR": {"checkbox": activity.get('pr', False)},
         "Fav": {"checkbox": activity.get('favorite', False)}
     }
+    properties.update(new_metrics_properties(activity))
+    if km_corridos is not None:
+        properties["Km corridos"] = {"number": km_corridos}
 
     page = {
         "parent": {"database_id": database_id},
@@ -411,7 +506,7 @@ def create_activity(client, database_id, activity, train_type):
 
     client.pages.create(**page)
 
-def update_activity(client, existing_activity, new_activity, train_type):
+def update_activity(client, existing_activity, new_activity, train_type, km_corridos=None):
     # Update an existing activity in the Notion database with new data
     activity_name = format_entertainment(new_activity.get('activityName', 'Unnamed Activity'))
     activity_type, activity_subtype = format_activity_type(
@@ -447,6 +542,10 @@ def update_activity(client, existing_activity, new_activity, train_type):
     current_train_type = (existing_activity['properties'].get('Train Type', {}).get('select') or {}).get('name')
     if current_train_type in (None, "", "PTE"):
         properties["Train Type"] = {"select": {"name": train_type}}
+
+    properties.update(new_metrics_properties(new_activity))
+    if km_corridos is not None:
+        properties["Km corridos"] = {"number": km_corridos}
 
     update = {
         "page_id": existing_activity['id'],
@@ -659,6 +758,8 @@ def main(garmin=None, client=None):
     garmin = garmin or get_garmin()
     client = client or get_notion()
 
+    ensure_properties(client, database_id, NEW_ACTIVITY_PROPERTIES)
+
     # Get all activities
     activities = get_all_activities(garmin)
 
@@ -680,11 +781,14 @@ def main(garmin=None, client=None):
         existing_activity = activity_exists(client, database_id, activity.get('activityId'), activity_date, activity_type, activity_name)
         
         if existing_activity:
-            #if activity_needs_update(existing_activity, activity):
-            update_activity(client, existing_activity, activity, train_type)
+            # Km corridos solo se calcula si falta (puede requerir llamadas pesadas a Garmin)
+            current_km = (existing_activity['properties'].get('Km corridos') or {}).get('number')
+            km_corridos = compute_km_corridos(garmin, activity, activity_type) if current_km is None else None
+            update_activity(client, existing_activity, activity, train_type, km_corridos)
             print(f"Updated: {activity_type} - {activity_name}")
         else:
-            create_activity(client, database_id, activity, train_type)
+            km_corridos = compute_km_corridos(garmin, activity, activity_type)
+            create_activity(client, database_id, activity, train_type, km_corridos)
             print(f"Created: {activity_type} - {activity_name}")
 
 if __name__ == '__main__':
