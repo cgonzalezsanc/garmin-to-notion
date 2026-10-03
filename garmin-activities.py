@@ -155,7 +155,17 @@ NEW_ACTIVITY_PROPERTIES = {
         {"name": "Normal", "color": "gray"}, {"name": "Fuerte", "color": "green"},
         {"name": "Muy fuerte", "color": "blue"}]}},
     "RPE": {"number": {}},
+    "Min Z1": {"number": {}},
+    "Min Z2": {"number": {}},
+    "Min Z3": {"number": {}},
+    "Min Z4": {"number": {}},
+    "Min Z5": {"number": {}},
 }
+
+# Minutos por zona de FC tal como los calcula Garmin con las zonas del reloj en
+# ese momento. OJO: a 03/10/2026 esas zonas NO coinciden con la ergometría
+# (08/09/2026), por eso el informe no las usa.
+HR_ZONE_PROPERTIES = [f"Min Z{i}" for i in range(1, 6)]
 
 # Autoevaluación de Garmin ("¿Cómo te has sentido?") en summaryDTO.directWorkoutFeel:
 # escala 0-100 en pasos de 25. Visto en datos reales: 25, 50 y 75; 50 = "Normal"
@@ -239,6 +249,19 @@ def self_evaluation_properties(garmin, activity_id):
     return props
 
 
+def hr_zone_properties(garmin, activity):
+    """Minutos en cada zona de FC de Garmin (get_activity_hr_in_timezones)."""
+    if not activity.get('averageHR'):
+        return {}
+    try:
+        zones = garmin.get_activity_hr_in_timezones(str(activity.get('activityId'))) or []
+    except Exception as e:
+        print(f"  Aviso: sin zonas de FC para {activity.get('activityId')} ({e})")
+        return {}
+    return {f"Min Z{z['zoneNumber']}": {"number": round((z.get('secsInZone') or 0) / 60, 1)}
+            for z in zones if 1 <= z.get('zoneNumber', 0) <= 5}
+
+
 def fill_empty(garmin, activity, existing, fetchers):
     """
     Llama a cada fetcher (que hace peticiones a Garmin) solo si alguna de sus
@@ -263,6 +286,7 @@ def extra_properties(garmin, activity, existing=None):
     fetchers = [
         (WEATHER_PROPERTIES, lambda g, a: weather_properties(g, a.get('activityId'))),
         (["Sensación", "RPE"], lambda g, a: self_evaluation_properties(g, a.get('activityId'))),
+        (HR_ZONE_PROPERTIES, hr_zone_properties),
     ]
     return fill_empty(garmin, activity, existing, fetchers)
 

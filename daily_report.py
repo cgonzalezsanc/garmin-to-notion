@@ -81,6 +81,36 @@ def to_madrid_date(iso):
     return dt.astimezone(MADRID_TZ).date()
 
 
+def minutes_above(garmin, activity_id, techo):
+    """
+    Minutos con FC por encima de `techo` en una actividad.
+    1) Serie temporal (FC muestra a muestra; cuenta tiempo de cronómetro, sin pausas).
+    2) Si no hay serie temporal: suma de la duración de las vueltas con FC media > techo.
+    Devuelve (minutos, método) o (None, motivo).
+    """
+    try:
+        details = garmin.get_activity_details(str(activity_id), maxchart=100000)
+        keys = {m["key"]: m["metricsIndex"] for m in details["metricDescriptors"]}
+        i_hr, i_dur = keys["directHeartRate"], keys["sumDuration"]
+        rows = [r["metrics"] for r in details.get("activityDetailMetrics", [])]
+        secs = 0.0
+        for prev, cur in zip(rows, rows[1:]):
+            if cur[i_hr] is None or cur[i_dur] is None or prev[i_dur] is None:
+                continue
+            if cur[i_hr] > techo:
+                secs += max(cur[i_dur] - prev[i_dur], 0)
+        if rows:
+            return round(secs / 60, 1), "serie_temporal"
+    except Exception as e:
+        print(f"Aviso: sin serie temporal de FC para {activity_id} ({e}); se usan las vueltas")
+    try:
+        laps = garmin.get_activity_splits(str(activity_id)).get("lapDTOs") or []
+        secs = sum(l.get("duration") or 0 for l in laps if (l.get("averageHR") or 0) > techo)
+        return round(secs / 60, 1), "vueltas"
+    except Exception as e:
+        return None, f"sin datos de FC ({e})"
+
+
 def date_filter(prop_name, on_or_after=None, on_or_before=None):
     conds = []
     if on_or_after:
@@ -132,11 +162,30 @@ def compute_metrics(client, garmin, today):
         streak += 1
         d -= timedelta(days=1)
 
+    # Sesiones del Plan de los últimos 7 días, para el tiempo sobre el techo de FC
+    past_plan = query_all(client, DS_PLAN,
+                          filter=date_filter("Fecha", on_or_after=today - timedelta(days=7), on_or_before=today))
+
+    def plan_session_for(activity_page, day):
+        """Sesión enlazada a la actividad; si no hay, la de carrera de ese mismo día."""
+        linked = [s for s in past_plan if activity_page["id"] in (prop(s, "Actividad") or [])]
+        same_day = [s for s in past_plan if (prop(s, "Fecha") or "")[:10] == day.isoformat()
+                    and prop(s, "Tipo") in RUN_TYPES]
+        return (linked or same_day or [None])[0], bool(linked)
+
     actividades_7d = []
     for a in sorted(activities, key=lambda x: prop(x["page"], "Date") or ""):
         if a["date"] < today - timedelta(days=7):
             continue
         p = a["page"]
+        sobre_techo = None
+        if prop(p, "Activity Type") == "Running":
+            session, enlazada = plan_session_for(p, a["date"])
+            techo = prop(session, "FC techo") if session else None
+            if techo and prop(p, "Activity Id"):
+                minutos, metodo = minutes_above(garmin, int(prop(p, "Activity Id")), techo)
+                sobre_techo = {"minutos": minutos, "techo": techo, "metodo": metodo,
+                               "sesion_plan": prop(session, "Sesión"), "sesion_enlazada": enlazada}
         actividades_7d.append({
             "fecha": a["date"].isoformat(),
             "nombre": prop(p, "Activity Name"),
@@ -157,6 +206,7 @@ def compute_metrics(client, garmin, today):
             "viento_kmh": prop(p, "Viento (km/h)"),
             "sensacion": prop(p, "Sensación"),
             "rpe": prop(p, "RPE"),
+            "min_sobre_techo": sobre_techo,
             "training_effect": prop(p, "Training Effect"),
             "aerobic_te": prop(p, "Aerobic"),
             "anaerobic_te": prop(p, "Anaerobic"),
