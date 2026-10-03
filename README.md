@@ -1,4 +1,50 @@
-[![Sync Garmin to Notion](https://github.com/chloevoyer/garmin-to-notion/actions/workflows/sync_garmin_to_notion.yml/badge.svg?branch=main)](https://github.com/chloevoyer/garmin-to-notion/actions/workflows/sync_garmin_to_notion.yml)
+[![Sync Garmin to Notion](https://github.com/cgonzalezsanc/garmin-to-notion/actions/workflows/sync_garmin_to_notion.yml/badge.svg?branch=main)](https://github.com/cgonzalezsanc/garmin-to-notion/actions/workflows/sync_garmin_to_notion.yml)
+
+## Esta versión (Carlos): sincronización + informe diario
+
+### Horarios (GitHub Actions, en UTC)
+| Cron (UTC) | Hora Madrid | Qué hace |
+|---|---|---|
+| `23 6 * * *` | 08:23 verano | Sincroniza + informe diario |
+| `23 7 * * *` | 08:23 invierno / 09:23 verano | Sincroniza + informe diario (si aún no existe o tenía datos incompletos) |
+| `7 10 * * *` | ~12:00 | Sincroniza + regenera el informe si tenía datos incompletos |
+| `7 16 * * *` | ~18:00 | Sincroniza |
+| `7 20 * * *` | ~22:00 | Sincroniza + informe pre-carrera si mañana hay Competición en el Plan |
+
+Qué informe toca lo decide `daily_report.py` según la hora de Madrid (`zoneinfo`), así que el cambio de horario no requiere tocar nada.
+A las 07:45 UTC una **rutina de Claude** (suscripción, sin API de pago) revisa el informe del día
+(`Revisado Claude` desmarcado), lee la página *Contexto entrenador* y redacta el texto final.
+Gestión de la rutina: https://claude.ai/code/routines
+
+### Lanzar a mano
+GitHub → Actions → *Sync Garmin to Notion* → **Run workflow**:
+- `dry_run`: imprime lo que escribiría en Notion sin escribir.
+- `informe`: `auto` (según la hora), `diario` o `pre-carrera` (fuerza el informe).
+
+### Secrets necesarios
+`GARMIN_EMAIL`, `GARMIN_PASSWORD`, `NOTION_TOKEN`, `NOTION_DB_ID`, `NOTION_PR_DB_ID`,
+`NOTION_STEPS_DB_ID`, `NOTION_SLEEP_DB_ID`, `NOTION_EQ_DB_ID`, `NOTION_EX_DB_ID`.
+Los IDs de Plan de entrenamiento, Informes diarios, Carreras y Contexto entrenador están en `daily_report.py`
+(se pueden sobrescribir por variable de entorno). La integración de Notion necesita acceso a la página *Deporte*.
+
+### En local
+```bash
+cp .env.example .env      # y rellenar credenciales
+python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+python main.py --dry-run                      # sincronización sin escribir
+python daily_report.py --dry-run --tipo diario
+python backfill_km_corridos.py --dry-run --since 2025-06-01
+```
+
+### Datos añadidos
+- **Actividades**: `Elev Gain (m)`, `Elev Loss (m)`, `Temp (°C)` (mín–máx; Garmin no da media y no siempre la da),
+  `Cadence`, `GAP`, `Max HR`, `Km corridos` (tramos más rápidos que 8:00/km; ver `compute_km_corridos`).
+- **Registro de sueño**: `HRV (ms)`, `HRV status`, `Body Battery mañana`, `Training Readiness` (al despertar),
+  `Carga aguda`, `Training Status`.
+- Las propiedades `Train Type`, `Shoes` y `Fav` no se sobrescriben al actualizar (se editan a mano).
+
+---
+
 # Garmin to Notion Integration :watch:
 This project connects your Garmin activities and personal records to your Notion database, allowing you to keep track of your performance metrics in one place.
 
