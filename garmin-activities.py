@@ -142,12 +142,19 @@ EXERCISE_MUSCLE_MAP = {
 NEW_ACTIVITY_PROPERTIES = {
     "Elev Gain (m)": {"number": {}},
     "Elev Loss (m)": {"number": {}},
-    "Temp (°C)": {"rich_text": {}},
+    "Temp (°C)": {"number": {}},
+    "Sensación térmica (°C)": {"number": {}},
+    "Humedad (%)": {"number": {}},
+    "Viento (km/h)": {"number": {}},
     "Cadence": {"number": {}},
     "GAP": {"rich_text": {}},
     "Max HR": {"number": {}},
     "Km corridos": {"number": {}},
 }
+
+# Propiedades meteorológicas: se rellenan solo si están vacías (Carlos puede
+# corregirlas a mano, p.ej. con la temperatura de un termómetro del recorrido).
+WEATHER_PROPERTIES = ["Temp (°C)", "Sensación térmica (°C)", "Humedad (%)", "Viento (km/h)"]
 
 # Más rápido que 8:00/km cuenta como corrido
 RUN_SPEED_THRESHOLD = 1000 / (8 * 60)  # m/s
@@ -163,14 +170,68 @@ def _text(value):
     return {"rich_text": [{"text": {"content": value}}] if value else []}
 
 
-def format_temperature(activity):
-    """Garmin solo da mín./máx. (no media) y no en todas las actividades."""
-    t_min, t_max = activity.get('minTemperature'), activity.get('maxTemperature')
-    if t_min is None and t_max is None:
-        return None
-    if t_min is None or t_max is None or round(t_min) == round(t_max):
-        return f"{round(t_min if t_min is not None else t_max)}"
-    return f"{round(t_min)}–{round(t_max)}"
+def is_empty(page, name):
+    """True si la propiedad no existe en la página o no tiene valor."""
+    p = (page or {}).get('properties', {}).get(name)
+    if not p:
+        return True
+    value = p.get(p['type'])
+    return value in (None, [], {}, "")
+
+
+def _f_to_c(value):
+    return None if value is None else round((value - 32) * 5 / 9, 1)
+
+
+def weather_properties(garmin, activity_id):
+    """
+    Tiempo de la estación meteorológica que asigna Garmin al inicio de la
+    actividad (no el sensor de muñeca, que sale inflado por el calor corporal).
+    Garmin lo devuelve en unidades imperiales: temperatura en °F y viento en mph
+    (verificado con la actividad 24594080658: 70 °F = 21,1 °C, 4 mph ≈ 7 km/h).
+    Indoor/cinta/gimnasio no tienen tiempo -> {} (no se usa el sensor de muñeca).
+    """
+    try:
+        w = garmin.get_activity_weather(str(activity_id))
+    except Exception as e:
+        print(f"  Aviso: sin tiempo meteorológico para {activity_id} ({e})")
+        return {}
+    if not w or w.get("temp") is None:
+        return {}
+    wind = w.get("windSpeed")
+    return {
+        "Temp (°C)": {"number": _f_to_c(w.get("temp"))},
+        "Sensación térmica (°C)": {"number": _f_to_c(w.get("apparentTemp"))},
+        "Humedad (%)": {"number": w.get("relativeHumidity")},
+        "Viento (km/h)": {"number": None if wind is None else round(wind * 1.609344, 1)},
+    }
+
+
+def fill_empty(garmin, activity, existing, fetchers):
+    """
+    Llama a cada fetcher (que hace peticiones a Garmin) solo si alguna de sus
+    propiedades está vacía en Notion, y devuelve únicamente las propiedades
+    vacías. Así nunca se pisan valores ya puestos (incluidos los manuales).
+    fetchers: [(lista_de_propiedades, función(garmin, activity) -> dict)]
+    """
+    properties = {}
+    for names, fetch in fetchers:
+        empty = [n for n in names if is_empty(existing, n)]
+        if not empty:
+            continue
+        values = fetch(garmin, activity)
+        for n in empty:
+            if n in values and values[n] not in ({"number": None}, {"select": None}):
+                properties[n] = values[n]
+    return properties
+
+
+def extra_properties(garmin, activity, existing=None):
+    """Propiedades que requieren llamadas extra a Garmin; solo rellena huecos."""
+    fetchers = [
+        (WEATHER_PROPERTIES, lambda g, a: weather_properties(g, a.get('activityId'))),
+    ]
+    return fill_empty(garmin, activity, existing, fetchers)
 
 
 def compute_km_corridos(garmin, activity, activity_type):
@@ -262,7 +323,6 @@ def new_metrics_properties(activity):
     return {
         "Elev Gain (m)": {"number": _round_or_none(activity.get('elevationGain'))},
         "Elev Loss (m)": {"number": _round_or_none(activity.get('elevationLoss'))},
-        "Temp (°C)": _text(format_temperature(activity)),
         "Cadence": {"number": _round_or_none(cadence)},
         "GAP": _text(format_pace_ms(activity.get('avgGradeAdjustedSpeed'))),
         "Max HR": {"number": _round_or_none(activity.get('maxHR'))},
@@ -496,7 +556,7 @@ def activity_needs_update(existing_activity, new_activity):
         (not has_subactivity)  # If the property doesn't exist, we need an update
     )
 
-def create_activity(client, database_id, activity, train_type, km_corridos=None):
+def create_activity(client, database_id, activity, train_type, km_corridos=None, extra=None):
 
     # Create a new activity in the Notion database
     activity_date = activity.get('startTimeGMT')
@@ -534,6 +594,7 @@ def create_activity(client, database_id, activity, train_type, km_corridos=None)
     properties.update(new_metrics_properties(activity))
     if km_corridos is not None:
         properties["Km corridos"] = {"number": km_corridos}
+    properties.update(extra or {})
 
     page = {
         "parent": {"database_id": database_id},
@@ -545,7 +606,7 @@ def create_activity(client, database_id, activity, train_type, km_corridos=None)
 
     return client.pages.create(**page)
 
-def update_activity(client, existing_activity, new_activity, train_type, km_corridos=None):
+def update_activity(client, existing_activity, new_activity, train_type, km_corridos=None, extra=None):
     # Update an existing activity in the Notion database with new data
     activity_name = format_entertainment(new_activity.get('activityName', 'Unnamed Activity'))
     activity_type, activity_subtype = format_activity_type(
@@ -585,6 +646,7 @@ def update_activity(client, existing_activity, new_activity, train_type, km_corr
     properties.update(new_metrics_properties(new_activity))
     if km_corridos is not None:
         properties["Km corridos"] = {"number": km_corridos}
+    properties.update(extra or {})
 
     update = {
         "page_id": existing_activity['id'],
@@ -823,12 +885,14 @@ def main(garmin=None, client=None):
             # Km corridos solo se calcula si falta (puede requerir llamadas pesadas a Garmin)
             current_km = (existing_activity['properties'].get('Km corridos') or {}).get('number')
             km_corridos = compute_km_corridos(garmin, activity, activity_type) if current_km is None else None
-            update_activity(client, existing_activity, activity, train_type, km_corridos)
+            extra = extra_properties(garmin, activity, existing_activity)
+            update_activity(client, existing_activity, activity, train_type, km_corridos, extra)
             print(f"Updated: {activity_type} - {activity_name}")
             page_id = existing_activity['id']
         else:
             km_corridos = compute_km_corridos(garmin, activity, activity_type)
-            page = create_activity(client, database_id, activity, train_type, km_corridos)
+            extra = extra_properties(garmin, activity)
+            page = create_activity(client, database_id, activity, train_type, km_corridos, extra)
             print(f"Created: {activity_type} - {activity_name}")
             page_id = (page or {}).get('id')
 

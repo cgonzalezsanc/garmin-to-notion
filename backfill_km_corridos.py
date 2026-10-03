@@ -57,6 +57,8 @@ def main():
             continue
 
         properties = ga.new_metrics_properties(activity)
+        # Tiempo meteorológico, sensación, zonas...: solo rellena lo que esté vacío
+        properties.update(ga.extra_properties(garmin, activity, existing))
         # La fecha viene de Garmin (no se edita a mano). Corrige filas en las que
         # el antiguo upsert por día+tipo mezcló dos actividades.
         properties["Date"] = {"date": {"start": activity.get("startTimeGMT")}}
@@ -72,6 +74,10 @@ def main():
         client.pages.update(page_id=existing["id"], properties=properties)
         distance = round((activity.get("distance") or 0) / 1000, 2)
         rows.append((activity.get("startTimeGMT", "")[:10], activity_type, name, distance, km))
+        filled = sorted(set(properties) - {"Date", "Activity Id", "Km corridos"} - set(ga.new_metrics_properties(activity)))
+        if filled:
+            print(f"  {activity.get('startTimeGMT', '')[:10]} {name}: " +
+                  ", ".join(f"{k}={list(properties[k].values())[0]}" for k in filled))
 
     print(f"\n{'Fecha':10}  {'Tipo':10}  {'Km':>7}  {'Corridos':>8}  Nombre")
     for d, t, n, dist, km in rows:
