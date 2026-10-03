@@ -160,6 +160,9 @@ NEW_ACTIVITY_PROPERTIES = {
     "Min Z3": {"number": {}},
     "Min Z4": {"number": {}},
     "Min Z5": {"number": {}},
+    # Solo la rellena Carlos a mano. El script NUNCA la escribe (no aparece en
+    # ningún payload de create/update); solo la lee el informe diario.
+    "Molestias": {"rich_text": {}},
 }
 
 # Minutos por zona de FC tal como los calcula Garmin con las zonas del reloj en

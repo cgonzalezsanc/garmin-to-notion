@@ -207,6 +207,7 @@ def compute_metrics(client, garmin, today):
             "sensacion": prop(p, "Sensación"),
             "rpe": prop(p, "RPE"),
             "min_sobre_techo": sobre_techo,
+            "molestias": prop(p, "Molestias"),
             "training_effect": prop(p, "Training Effect"),
             "aerobic_te": prop(p, "Aerobic"),
             "anaerobic_te": prop(p, "Anaerobic"),
