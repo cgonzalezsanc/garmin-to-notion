@@ -150,7 +150,17 @@ NEW_ACTIVITY_PROPERTIES = {
     "GAP": {"rich_text": {}},
     "Max HR": {"number": {}},
     "Km corridos": {"number": {}},
+    "Sensación": {"select": {"options": [
+        {"name": "Muy débil", "color": "red"}, {"name": "Débil", "color": "orange"},
+        {"name": "Normal", "color": "gray"}, {"name": "Fuerte", "color": "green"},
+        {"name": "Muy fuerte", "color": "blue"}]}},
+    "RPE": {"number": {}},
 }
+
+# Autoevaluación de Garmin ("¿Cómo te has sentido?") en summaryDTO.directWorkoutFeel:
+# escala 0-100 en pasos de 25. Visto en datos reales: 25, 50 y 75; 50 = "Normal"
+# verificado contra Garmin Connect (actividad 24594080658).
+FEEL_SCALE = {0: "Muy débil", 25: "Débil", 50: "Normal", 75: "Fuerte", 100: "Muy fuerte"}
 
 # Propiedades meteorológicas: se rellenan solo si están vacías (Carlos puede
 # corregirlas a mano, p.ej. con la temperatura de un termómetro del recorrido).
@@ -207,6 +217,28 @@ def weather_properties(garmin, activity_id):
     }
 
 
+def self_evaluation_properties(garmin, activity_id):
+    """
+    Sensación y esfuerzo percibido que se introducen en el reloj al terminar.
+    - directWorkoutFeel 0-100 -> Muy débil / Débil / Normal / Fuerte / Muy fuerte
+      (valores intermedios se redondean al paso de 25 más cercano).
+    - directWorkoutRpe 10-100 -> RPE 1-10 (÷10; Garmin 30 = "3/10" en Connect).
+    Si no se evaluó, Garmin no devuelve los campos y quedan vacíos.
+    """
+    try:
+        summary = garmin.get_activity(str(activity_id)).get("summaryDTO") or {}
+    except Exception as e:
+        print(f"  Aviso: sin autoevaluación para {activity_id} ({e})")
+        return {}
+    feel, rpe = summary.get("directWorkoutFeel"), summary.get("directWorkoutRpe")
+    props = {}
+    if feel is not None:
+        props["Sensación"] = {"select": {"name": FEEL_SCALE[min(FEEL_SCALE, key=lambda k: abs(k - feel))]}}
+    if rpe is not None:
+        props["RPE"] = {"number": round(rpe / 10)}
+    return props
+
+
 def fill_empty(garmin, activity, existing, fetchers):
     """
     Llama a cada fetcher (que hace peticiones a Garmin) solo si alguna de sus
@@ -230,6 +262,7 @@ def extra_properties(garmin, activity, existing=None):
     """Propiedades que requieren llamadas extra a Garmin; solo rellena huecos."""
     fetchers = [
         (WEATHER_PROPERTIES, lambda g, a: weather_properties(g, a.get('activityId'))),
+        (["Sensación", "RPE"], lambda g, a: self_evaluation_properties(g, a.get('activityId'))),
     ]
     return fill_empty(garmin, activity, existing, fetchers)
 
