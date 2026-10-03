@@ -217,6 +217,45 @@ def compute_km_corridos(garmin, activity, activity_type):
         return km
 
 
+PLAN_DATA_SOURCE_ID = os.getenv("NOTION_DS_PLAN", "59f320f1-acce-40f0-bdd9-ffe2bbcdefd0")
+PLAN_RUN_TYPES = {"Rodaje", "Tirada larga", "Umbral", "Series", "Tempo", "Competición"}
+
+
+def link_plan_session(client, activity_page_id, activity, activity_type):
+    """
+    Si en el Plan hay una sesión ese mismo día (hora de Madrid), del tipo
+    compatible, en estado Planificada y sin actividad enlazada, la enlaza y la
+    marca como Hecha. No toca sesiones Modificadas/Saltadas ni ya enlazadas.
+    """
+    if activity_type == "Running":
+        compatible = PLAN_RUN_TYPES
+    elif activity_type == "Strength":
+        compatible = {"Gimnasio"}
+    else:
+        return
+    if not activity_page_id or activity_page_id == "dry-run":
+        return
+
+    start = datetime.strptime(activity.get('startTimeGMT'), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    day = start.astimezone(local_tz).date().isoformat()
+    sessions = client.data_sources.query(
+        data_source_id=PLAN_DATA_SOURCE_ID,
+        filter={"property": "Fecha", "date": {"equals": day}},
+    ).get("results", [])
+    for s in sessions:
+        props = s["properties"]
+        tipo = (props.get("Tipo", {}).get("select") or {}).get("name")
+        estado = (props.get("Estado", {}).get("select") or {}).get("name")
+        linked = props.get("Actividad", {}).get("relation") or []
+        if tipo in compatible and estado in (None, "Planificada") and not linked:
+            client.pages.update(page_id=s["id"], properties={
+                "Actividad": {"relation": [{"id": activity_page_id}]},
+                "Estado": {"select": {"name": "Hecha"}},
+            })
+            print(f"  Plan: sesión del {day} marcada como Hecha")
+            return
+
+
 def new_metrics_properties(activity):
     """Propiedades nuevas que vienen directamente en la lista de actividades de Garmin."""
     cadence = activity.get('averageRunningCadenceInStepsPerMinute') or activity.get('averageBikingCadenceInRevPerMinute')
@@ -504,7 +543,7 @@ def create_activity(client, database_id, activity, train_type, km_corridos=None)
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
 
-    client.pages.create(**page)
+    return client.pages.create(**page)
 
 def update_activity(client, existing_activity, new_activity, train_type, km_corridos=None):
     # Update an existing activity in the Notion database with new data
@@ -786,10 +825,17 @@ def main(garmin=None, client=None):
             km_corridos = compute_km_corridos(garmin, activity, activity_type) if current_km is None else None
             update_activity(client, existing_activity, activity, train_type, km_corridos)
             print(f"Updated: {activity_type} - {activity_name}")
+            page_id = existing_activity['id']
         else:
             km_corridos = compute_km_corridos(garmin, activity, activity_type)
-            create_activity(client, database_id, activity, train_type, km_corridos)
+            page = create_activity(client, database_id, activity, train_type, km_corridos)
             print(f"Created: {activity_type} - {activity_name}")
+            page_id = (page or {}).get('id')
+
+        try:
+            link_plan_session(client, page_id, activity, activity_type)
+        except Exception as e:
+            print(f"  Aviso: no se pudo enlazar con el Plan ({e})")
 
 if __name__ == '__main__':
     main()
