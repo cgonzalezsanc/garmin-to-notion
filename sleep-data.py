@@ -1,16 +1,10 @@
 from datetime import date, datetime, timedelta, UTC
-from garminconnect import Garmin
-from notion_client import Client
-from dotenv import load_dotenv, dotenv_values
+from common import get_garmin, get_notion, get_data_source_id
 import pytz
 import os
 
 # Constants
 local_tz = pytz.timezone("Europe/Madrid")
-
-# Load environment variables
-load_dotenv()
-CONFIG = dotenv_values()
 
 def get_sleep_data(garmin):
     today = datetime.today().date()
@@ -34,21 +28,6 @@ def format_time_readable(timestamp):
 
 def format_date_for_name(sleep_date):
     return datetime.strptime(sleep_date, "%Y-%m-%d").strftime("%d.%m.%Y") if sleep_date else "Unknown"
-
-def sleep_data_exists(client, database_id, sleep_date):
-    query = client.databases.query(
-        database_id=database_id,
-        filter={"property": "Long Date", "date": {"equals": sleep_date}}
-    )
-    results = query.get('results', [])
-    return results[0] if results else None  # Ensure it returns None instead of causing IndexError
-
-def get_data_source_id(client, database_id):
-    db = client.databases.retrieve(database_id=database_id)
-    data_sources = db.get("data_sources", [])
-    if not data_sources:
-        raise RuntimeError(f"No data_sources found for database {database_id}")
-    return data_sources[0]["id"]
 
 def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
     daily_sleep = sleep_data.get('dailySleepDTO', {})
@@ -80,7 +59,8 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
         "Deep Sleep": {"rich_text": [{"text": {"content": format_duration(daily_sleep.get('deepSleepSeconds', 0))}}]},
         "REM Sleep": {"rich_text": [{"text": {"content": format_duration(daily_sleep.get('remSleepSeconds', 0))}}]},
         "Awake Time": {"rich_text": [{"text": {"content": format_duration(daily_sleep.get('awakeSleepSeconds', 0))}}]},
-        "Resting HR": {"number": sleep_data.get('restingHeartRate', 0)},
+        # Sin dato -> vacío (un 0 contaminaría la mediana de FC en reposo)
+        "Resting HR": {"number": sleep_data.get('restingHeartRate') or None},
         "Score": {"number": daily_sleep.get('sleepScores', {}).get('overall', {}).get('value', None)}
     }
 
@@ -105,19 +85,11 @@ def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
     #client.pages.create(parent={"database_id": database_id}, properties=properties, icon={"emoji": "😴"})
 
 
-def main():
-    load_dotenv()
-
-    # Initialize Garmin and Notion clients using environment variables
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
+def main(garmin=None, client=None):
     database_id = os.getenv("NOTION_SLEEP_DB_ID")
 
-    # Initialize Garmin client and login
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-    client = Client(auth=notion_token)
+    garmin = garmin or get_garmin()
+    client = client or get_notion()
 
     """
     Get last x days of daily step count data from Garmin Connect.

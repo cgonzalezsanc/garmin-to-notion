@@ -1,7 +1,5 @@
 from datetime import date, timedelta
-from garminconnect import Garmin
-from notion_client import Client
-from dotenv import load_dotenv
+from common import get_garmin, get_notion, get_data_source_id
 import os
 
 def get_all_daily_steps(garmin):
@@ -16,13 +14,6 @@ def get_all_daily_steps(garmin):
     for d in daterange:
         daily_steps += garmin.get_daily_steps(d.isoformat(), d.isoformat())
     return daily_steps
-
-def get_data_source_id(client, database_id):
-    db = client.databases.retrieve(database_id=database_id)
-    data_sources = db.get("data_sources", [])
-    if not data_sources:
-        raise RuntimeError(f"No data_sources found for database {database_id}")
-    return data_sources[0]["id"]
 
 def daily_steps_exist(client, database_id, activity_date):
     """
@@ -99,19 +90,11 @@ def create_daily_steps(client, database_id, steps):
     
     client.pages.create(**page)
 
-def main():
-    load_dotenv()
-
-    # Initialize Garmin and Notion clients using environment variables
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
+def main(garmin=None, client=None):
     database_id = os.getenv("NOTION_STEPS_DB_ID")
 
-    # Initialize Garmin client and login
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-    client = Client(auth=notion_token)
+    garmin = garmin or get_garmin()
+    client = client or get_notion()
 
     daily_steps = get_all_daily_steps(garmin)
     for steps in daily_steps:

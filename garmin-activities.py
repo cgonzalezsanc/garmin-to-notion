@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
-from garminconnect import Garmin
-from notion_client import Client
-from dotenv import load_dotenv
+from common import get_garmin, get_notion, get_data_source_id
 import pytz
 import os
 
@@ -221,13 +219,6 @@ def format_pace(average_speed):
     else:
         return ""
 
-def get_data_source_id(client, database_id):
-    db = client.databases.retrieve(database_id=database_id)
-    data_sources = db.get("data_sources", [])
-    if not data_sources:
-        raise RuntimeError(f"No data_sources found for database {database_id}")
-    return data_sources[0]["id"]
-
 _SELECT_OPTIONS_CACHE = {}
 
 def ensure_select_option_exists(client, database_id, property_name, option_name):
@@ -302,7 +293,20 @@ def ensure_select_option_exists(client, database_id, property_name, option_name)
 
     return option_name
 
-def activity_exists(client, database_id, activity_date, activity_type, activity_name):
+def activity_exists(client, database_id, activity_id, activity_date, activity_type, activity_name):
+    data_source_id = get_data_source_id(client, database_id)
+
+    # 1) Búsqueda por Activity Id (identificador único de Garmin)
+    if activity_id:
+        query = client.data_sources.query(
+            data_source_id=data_source_id,
+            filter={"property": "Activity Id", "number": {"equals": activity_id}}
+        )
+        results = query.get("results", [])
+        if results:
+            return results[0]
+
+    # 2) Filas antiguas sin Activity Id: mismo día y mismo tipo
     dt = datetime.strptime(activity_date, "%Y-%m-%d %H:%M:%S")
     date_only = dt.date().isoformat()
 
@@ -313,14 +317,13 @@ def activity_exists(client, database_id, activity_date, activity_type, activity_
 
     lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
 
-    data_source_id = get_data_source_id(client, database_id)
-
     query = client.data_sources.query(
         data_source_id=data_source_id,
         filter={
             "and": [
                 {"property": "Date", "date": {"equals": date_only}},
-                {"property": "Activity Type", "select": {"equals": lookup_type}}
+                {"property": "Activity Type", "select": {"equals": lookup_type}},
+                {"property": "Activity Id", "number": {"is_empty": True}}
             ]
         }
     )
@@ -410,7 +413,7 @@ def create_activity(client, database_id, activity, train_type):
 
 def update_activity(client, existing_activity, new_activity, train_type):
     # Update an existing activity in the Notion database with new data
-    activity_name = new_activity.get('activityName', 'Unnamed Activity')
+    activity_name = format_entertainment(new_activity.get('activityName', 'Unnamed Activity'))
     activity_type, activity_subtype = format_activity_type(
         new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
@@ -423,7 +426,6 @@ def update_activity(client, existing_activity, new_activity, train_type):
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
         "Activity Id": {"number": round(new_activity.get('activityId', 0))},
-        "Train Type": {"select": {"name": train_type}},
         "Activity Name": {"title": [{"text": {"content": activity_name}}]},
         "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1000, 2)},
         "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
@@ -438,8 +440,13 @@ def update_activity(client, existing_activity, new_activity, train_type):
         "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
         "Anaerobic Effect": {"select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
         "PR": {"checkbox": new_activity.get('pr', False)},
-        "Fav": {"checkbox": new_activity.get('favorite', False)}
     }
+
+    # Train Type y Fav se pueden editar a mano en Notion: no se sobrescriben.
+    # Train Type solo se rellena si está vacío o pendiente (PTE).
+    current_train_type = (existing_activity['properties'].get('Train Type', {}).get('select') or {}).get('name')
+    if current_train_type in (None, "", "PTE"):
+        properties["Train Type"] = {"select": {"name": train_type}}
 
     update = {
         "page_id": existing_activity['id'],
@@ -645,20 +652,12 @@ def get_activity_detail(client, activity, activity_type, database_exercises_id):
         else:
             create_exercise_entry(client, database_exercises_id, activity, s)
 
-def main():
-    load_dotenv()
-
-    # Initialize Garmin and Notion clients using environment variables
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
+def main(garmin=None, client=None):
     database_id = os.getenv("NOTION_DB_ID")
     database_exercises_id = os.getenv("NOTION_EX_DB_ID")
 
-    # Initialize Garmin client and login
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-    client = Client(auth=notion_token)
+    garmin = garmin or get_garmin()
+    client = client or get_notion()
 
     # Get all activities
     activities = get_all_activities(garmin)
@@ -678,7 +677,7 @@ def main():
         train_type = get_training_type(activity_type, activity_name)
         
         # Check if activity already exists in Notion
-        existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
+        existing_activity = activity_exists(client, database_id, activity.get('activityId'), activity_date, activity_type, activity_name)
         
         if existing_activity:
             #if activity_needs_update(existing_activity, activity):

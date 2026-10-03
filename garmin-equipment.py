@@ -1,6 +1,5 @@
 from datetime import date
-from garminconnect import Garmin
-from notion_client import Client
+from common import get_garmin, get_notion, get_data_source_id
 import os
 import sys
 
@@ -96,13 +95,6 @@ def fill_properties(client, gear, garmin, today, gear_name, gear_id):
 
     return properties
 
-def get_data_source_id(client, database_id):
-    db = client.databases.retrieve(database_id=database_id)
-    data_sources = db.get("data_sources", [])
-    if not data_sources:
-        raise RuntimeError(f"No data_sources found for database {database_id}")
-    return data_sources[0]["id"]
-
 # Comprobación de si el equipamiento ya existe en la tabla de Notion
 def check_if_gear_exists(gear_id, client, database_id):
     # Filtro para comprobar si ya existe la entrada
@@ -128,19 +120,11 @@ def get_gear_icon_url(gear_name):
             return url
     return "https://img.icons8.com/?size=100&id=XAUYGhUZyfQG&format=png&color=000000"  # Si no se encuentra ninguna marca
 
-def main():
-    # Autenticación y configuración
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
+def main(garmin=None, client=None):
     database_id = os.getenv("NOTION_EQ_DB_ID")
 
-   # Iniciar sesión en Garmin
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-
-    # Iniciar cliente de Notion
-    client = Client(auth=notion_token)
+    garmin = garmin or get_garmin()
+    client = client or get_notion()
 
     # Recuperamos la lista de equipamientos
     gears = get_gears(garmin)

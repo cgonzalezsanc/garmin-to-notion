@@ -9,6 +9,11 @@ on:
     - cron: '0 16 * * *'  # 18:00 Madrid
     - cron: '0 20 * * *'  # 22:00 Madrid
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no escribe en Notion)'
+        type: boolean
+        default: false
 env:
   TZ: 'Europe/Madrid'
 
@@ -64,9 +69,6 @@ jobs:
           NOTION_EQ_DB_ID: ${{ secrets.NOTION_EQ_DB_ID }}
           NOTION_EX_DB_ID: ${{ secrets.NOTION_EX_DB_ID }}
           TZ: 'Europe/Madrid'
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
-          python garmin-activities.py
-          python personal-records.py
-          python daily-steps.py
-          python sleep-data.py
-          python garmin-equipment.py
+          python main.py

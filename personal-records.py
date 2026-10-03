@@ -1,6 +1,5 @@
 from datetime import date, datetime
-from garminconnect import Garmin
-from notion_client import Client
+from common import get_garmin, get_notion, get_data_source_id
 import os
 
 def get_icon_for_record(activity_name):
@@ -262,13 +261,6 @@ def replace_activity_name_by_typeId(typeId):
     }
     return typeId_name_map.get(typeId, "Unnamed Activity")
 
-def get_data_source_id(client, database_id):
-    db = client.databases.retrieve(database_id=database_id)
-    data_sources = db.get("data_sources", [])
-    if not data_sources:
-        raise RuntimeError(f"No data_sources found for database {database_id}")
-    return data_sources[0]["id"]
-
 def get_existing_record(client, database_id, activity_name):
     data_source_id = get_data_source_id(client, database_id)
     query = client.data_sources.query(
@@ -349,16 +341,11 @@ def write_new_record(client, database_id, activity_date, activity_type, activity
     except Exception as e:
         print(f"Error writing new record: {e}")
 
-def main():
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
+def main(garmin=None, client=None):
     database_id = os.getenv("NOTION_PR_DB_ID")
 
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-
-    client = Client(auth=notion_token)
+    garmin = garmin or get_garmin()
+    client = client or get_notion()
 
     records = garmin.get_personal_record()
     filtered_records = [record for record in records if record.get('typeId') != 16]
