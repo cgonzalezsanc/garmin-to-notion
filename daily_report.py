@@ -9,9 +9,10 @@ Informe diario de entrenamiento.
    "Revisado Claude" desmarcado y redacta el informe final.
 
 Cuándo genera informe (hora de Madrid), salvo que se fuerce con --tipo:
-- 08:00-15:59  Diario si aún no existe, o si existe con "Datos incompletos"
+- Desde las 08:00 (sin hora límite, porque GitHub retrasa los cron varias horas):
+               Diario si aún no existe, o si existe con "Datos incompletos"
                (lo regenera en la misma página). Si existe completo, no hace nada.
-- 20:00-23:59  Pre-carrera, solo si en el Plan hay Competición mañana.
+- 20:00-23:59  Además, Pre-carrera, solo si en el Plan hay Competición mañana.
 
 Uso:
     python daily_report.py --dry-run
@@ -536,26 +537,30 @@ def write_report(client, existing, day, tipo, m, semaforo, ajustada, title, body
         print(f"Informe creado: {title} ({page.get('url', page.get('id'))})")
 
 
-def decide_tipo(now, client, day, forced):
-    """Devuelve el tipo de informe a generar ahora, o None. Ver docstring del módulo."""
+def decide_tipos(now, client, day, forced):
+    """
+    Devuelve la lista de informes a generar ahora. Ver docstring del módulo.
+    GitHub retrasa los cron programados varias horas (visto: hasta 8 h), así que
+    el Diario no tiene hora límite: se genera en la primera ejecución desde las 08:00.
+    """
     if forced:
-        return {"diario": "Diario", "pre-carrera": "Pre-carrera"}[forced]
-    h = now.hour
-    if 8 <= h < 16:
+        return [{"diario": "Diario", "pre-carrera": "Pre-carrera"}[forced]]
+    tipos = []
+    if now.hour >= 8:
         existing = find_report(client, day, "Diario")
         if existing is None or prop(existing, "Datos incompletos"):
-            return "Diario"
-        print("El informe diario de hoy ya existe y está completo.")
-        return None
-    if h >= 20:
+            tipos.append("Diario")
+        else:
+            print("El informe diario de hoy ya existe y está completo.")
+    if now.hour >= 20:
         tomorrow = (day + timedelta(days=1)).isoformat()
         rows = client.data_sources.query(data_source_id=DS_PLAN, filter={"and": [
             {"property": "Fecha", "date": {"equals": tomorrow}},
             {"property": "Tipo", "select": {"equals": "Competición"}},
         ]}).get("results", [])
         if rows and find_report(client, day, "Pre-carrera") is None:
-            return "Pre-carrera"
-    return None
+            tipos.append("Pre-carrera")
+    return tipos
 
 
 def main():
@@ -569,14 +574,12 @@ def main():
     today = date.fromisoformat(args.fecha) if args.fecha else now.date()
     client = get_notion()
 
-    tipo = decide_tipo(now, client, today, args.tipo)
-    if not tipo:
+    tipos = decide_tipos(now, client, today, args.tipo)
+    if not tipos:
         print(f"{now:%H:%M} Madrid: no toca generar informe.")
         return
-    print(f"Generando informe {tipo} para {today}")
 
     ensure_properties(client, DB_INFORMES, {"Revisado Claude": {"checkbox": {}}})
-    existing = find_report(client, today, tipo)
 
     try:
         metrics = compute_metrics(client, get_garmin(), today)
@@ -589,6 +592,13 @@ def main():
     print("MÉTRICAS DEL INFORME:")
     print(json.dumps(metrics, ensure_ascii=False, indent=1, default=str))
 
+    for tipo in tipos:
+        print(f"Generando informe {tipo} para {today}")
+        generate_report(client, today, tipo, metrics)
+
+
+def generate_report(client, today, tipo, metrics):
+    existing = find_report(client, today, tipo)
     error = None
     try:
         semaforo, ajustada, motivos, info = apply_rules(metrics, tipo)
