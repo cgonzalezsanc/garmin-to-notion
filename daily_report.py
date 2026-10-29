@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import statistics
+import time
 import traceback
 from datetime import date, datetime, timedelta, timezone
 
@@ -215,14 +216,22 @@ def compute_metrics(client, garmin, today):
         })
 
     # --- Sueño y recuperación
-    sleep_rows = query_all(client, DS_SUENO,
-                           filter=date_filter("Long Date", on_or_after=today - timedelta(days=28), on_or_before=today))
-    by_day = {}
-    for s in sleep_rows:
-        d = prop(s, "Long Date")
-        if d:
-            by_day[date.fromisoformat(d[:10])] = s
-    hoy = by_day.get(today)
+    # El buscador de Notion tarda en indexar páginas recién creadas: si la fila de
+    # sueño de hoy la acaba de crear sleep-data en esta misma ejecución, la
+    # consulta puede no verla todavía (pasó el 29/10/2026). Se reintenta.
+    for attempt in range(4):
+        sleep_rows = query_all(client, DS_SUENO,
+                               filter=date_filter("Long Date", on_or_after=today - timedelta(days=28), on_or_before=today))
+        by_day = {}
+        for s in sleep_rows:
+            d = prop(s, "Long Date")
+            if d:
+                by_day[date.fromisoformat(d[:10])] = s
+        hoy = by_day.get(today)
+        if hoy or attempt == 3:
+            break
+        print(f"Sueño de hoy aún no visible en Notion; reintento en 30 s ({attempt + 1}/3)")
+        time.sleep(30)
     rhr_prev = [prop(s, "Resting HR") for d, s in by_day.items() if d < today]
     rhr_prev = [v for v in rhr_prev if v]
 
