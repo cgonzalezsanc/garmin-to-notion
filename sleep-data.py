@@ -179,7 +179,8 @@ def main(garmin=None, client=None):
     """
     Get last x days of daily step count data from Garmin Connect.
     """
-    startdate = date.today() - timedelta(days=3)
+    # 7 días: cubre huecos si GitHub deja de lanzar los cron unos días (pasó en oct. 2026)
+    startdate = date.today() - timedelta(days=7)
     enddate = date.today()
     daterange = [startdate + timedelta(days=x) for x in range((enddate - startdate).days + 1)]
 
