@@ -4,6 +4,8 @@ on:
   schedule:
     # GitHub Actions usa UTC. Madrid = UTC+2 en verano (CEST) y UTC+1 en invierno (CET).
     # Minutos "raros" a propósito: GitHub retrasa mucho los cron en punto.
+    # Si los cron dejan de dispararse (pasó del 14/10 al 29/10/2026), desactivar y
+    # reactivar el workflow o hacer un commit que toque este fichero los vuelve a registrar.
     - cron: '23 6 * * *'   # 08:23 Madrid en verano
     - cron: '23 7 * * *'   # 08:23 Madrid en invierno / 09:23 en verano
     - cron: '7 10 * * *'   # ~12:00 Madrid
