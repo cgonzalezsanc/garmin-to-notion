@@ -17,6 +17,7 @@ GEAR_IMAGES = {
     "Adidas Adizero EVO SL": "https://i.ibb.co/C50J0CWp/Zapatilla-Adizero-EVO-SL-Plateado-JR3419-01-00-standard.jpg",
     "Nike Vomero Plus": "https://canarias.base.net/cdn/shop/files/1-original_8ee025da-2323-4178-85b9-82f002332bda.jpg?v=1761112011&width=1500",
     "ASICS GEL-Kayano 32": "https://dam.elcorteingles.es/producto/www-001017730883216-00.jpg",
+    "ASICS Metaspeed Sky Tokyo": "https://images.asics.com/is/image/asics/1013A162_600_SR_RT_GLB",
     # Add more mappings as needed
 }
 
