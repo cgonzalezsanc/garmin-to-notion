@@ -11,6 +11,9 @@
 | `7 16 * * *` | ~18:00 | Sincroniza |
 | `7 20 * * *` | ~22:00 | Sincroniza + informe pre-carrera si mañana hay Competición en el Plan |
 
+`personal-records` y `garmin-equipment` solo se ejecutan una vez al día: cuando alguna zapatilla activa tiene `Fecha` anterior a hoy.
+Para forzarlos: `python main.py --only personal-records garmin-equipment`.
+
 Qué informe toca lo decide `daily_report.py` según la hora de Madrid (`zoneinfo`), así que el cambio de horario no requiere tocar nada.
 A las 07:45 UTC una **rutina de Claude** (suscripción, sin API de pago) revisa el informe del día
 (`Revisado Claude` desmarcado), lee la página *Contexto entrenador* y redacta el texto final.
