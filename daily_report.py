@@ -579,6 +579,15 @@ def main():
     parser.add_argument("--tipo", choices=["diario", "pre-carrera"], help="Fuerza el informe aunque no toque por la hora")
     args = parser.parse_args()
 
+    try:
+        run(args)
+    except Exception as e:
+        # Fallo controlado: el workflow no falla por el informe, pero queda registrado
+        traceback.print_exc()
+        print(f"ERROR generando el informe: {e}")
+
+
+def run(args):
     now = now_madrid()
     today = date.fromisoformat(args.fecha) if args.fecha else now.date()
     client = get_notion()
@@ -590,13 +599,7 @@ def main():
 
     ensure_properties(client, DB_INFORMES, {"Revisado Claude": {"checkbox": {}}})
 
-    try:
-        metrics = compute_metrics(client, get_garmin(), today)
-    except Exception as e:
-        # Fallo controlado: el workflow no falla, pero queda registrado
-        traceback.print_exc()
-        print(f"ERROR calculando métricas: {e}")
-        return
+    metrics = compute_metrics(client, get_garmin(), today)
 
     print("MÉTRICAS DEL INFORME:")
     print(json.dumps(metrics, ensure_ascii=False, indent=1, default=str))
