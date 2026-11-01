@@ -38,13 +38,15 @@ def steps_need_update(existing_steps, new_steps):
     Compare existing steps data with imported data to determine if an update is needed.
     """
     existing_props = existing_steps['properties']
-    activity_type = "Walking"
+    title = "".join(t.get('plain_text', '') for t in existing_props['Activity Type']['title'])
+    # En Notion la distancia está en km; Garmin la da en metros
+    total_distance = round((new_steps.get('totalDistance') or 0) / 1000, 2)
     
     return (
         existing_props['Total Steps']['number'] != new_steps.get('totalSteps') or
         existing_props['Step Goal']['number'] != new_steps.get('stepGoal') or
-        existing_props['Total Distance (km)']['number'] != new_steps.get('totalDistance') or
-        existing_props['Activity Type']['title'] != activity_type
+        existing_props['Total Distance (km)']['number'] != total_distance or
+        title != "Walking"
     )
 
 def update_daily_steps(client, existing_steps, new_steps):
