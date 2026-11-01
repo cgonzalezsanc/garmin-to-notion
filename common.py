@@ -7,11 +7,12 @@ Utilidades compartidas por todos los scripts de sincronización:
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from garminconnect import Garmin
-from notion_client import Client
+from notion_client import APIErrorCode, APIResponseError, Client
 from dotenv import load_dotenv
 import json
 import os
 import sys
+import time
 
 MADRID_TZ = ZoneInfo("Europe/Madrid")
 
@@ -97,8 +98,35 @@ class _DryRunProxy:
         return value
 
 
+# Notion admite una media de 3 peticiones por segundo y responde 429 si se supera.
+NOTION_MIN_INTERVAL = 0.4  # segundos entre peticiones (2,5/s)
+NOTION_MAX_RETRIES = 6
+
+
+class ThrottledClient(Client):
+    """Cliente de Notion con freno de peticiones y reintentos ante 429 (notion-client no reintenta)."""
+
+    _last_request = 0.0
+
+    def request(self, *args, **kwargs):
+        for attempt in range(NOTION_MAX_RETRIES + 1):
+            pause = self._last_request + NOTION_MIN_INTERVAL - time.monotonic()
+            if pause > 0:
+                time.sleep(pause)
+            self._last_request = time.monotonic()
+            try:
+                return super().request(*args, **kwargs)
+            except APIResponseError as e:
+                # Un 429 no se ha procesado: repetirlo es seguro también en escrituras
+                if e.code != APIErrorCode.RateLimited or attempt == NOTION_MAX_RETRIES:
+                    raise
+                wait = float(e.headers.get("retry-after") or 2 ** attempt)
+                print(f"Notion 429: reintento {attempt + 1}/{NOTION_MAX_RETRIES} en {wait:g} s")
+                time.sleep(wait)
+
+
 def get_notion():
-    client = Client(auth=os.getenv("NOTION_TOKEN"))
+    client = ThrottledClient(auth=os.getenv("NOTION_TOKEN"))
     if is_dry_run():
         print("[DRY-RUN] No se escribirá nada en Notion.")
         return _DryRunProxy(client)
