@@ -1,6 +1,7 @@
 from datetime import date
 from common import get_garmin, get_notion, get_data_source_id
 import os
+import re
 import sys
 
     # Añado las imágenes para cada uno
@@ -18,6 +19,7 @@ GEAR_IMAGES = {
     "Nike Vomero Plus": "https://canarias.base.net/cdn/shop/files/1-original_8ee025da-2323-4178-85b9-82f002332bda.jpg?v=1761112011&width=1500",
     "ASICS GEL-Kayano 32": "https://dam.elcorteingles.es/producto/www-001017730883216-00.jpg",
     "ASICS Metaspeed Sky Tokyo": "https://images.asics.com/is/image/asics/1013A162_600_SR_RT_GLB",
+    "On Cloudmonster Hyper": "https://i.ibb.co/nsP84Sx3/hyper-image.webp",
     # Add more mappings as needed
 }
 
@@ -27,6 +29,7 @@ GEAR_ICONS = {
     "hoka": "https://i.ibb.co/MDDTwrMN/Hoka-Update-2.png",
     "nike": "https://i.ibb.co/fVpDW7Rw/nike.jpg",
     "saucony": "https://i.ibb.co/rXpXDfX/saucony.webp",
+    "on": "https://i.ibb.co/0VnrPQxK/on-logo.jpg",
     # Add more mappings as needed
 }
 
@@ -116,8 +119,8 @@ def get_gear_icon_url(gear_name):
     gear_name_cf = gear_name.casefold()
 
     for brand, url in GEAR_ICONS.items():
-        # Comprobamos si el nombre de la marca aparece en gear_name (ambos en minúsculas con casefold)
-        if brand.casefold() in gear_name_cf:
+        # Comprobamos si la marca aparece como palabra completa en gear_name (evita que "on" coincida dentro de otras palabras)
+        if re.search(rf"\b{re.escape(brand.casefold())}\b", gear_name_cf):
             return url
     return "https://img.icons8.com/?size=100&id=XAUYGhUZyfQG&format=png&color=000000"  # Si no se encuentra ninguna marca
 
